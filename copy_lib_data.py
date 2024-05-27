@@ -66,7 +66,7 @@ def merge_dependencies(source_ini, target_ini):
 
 # Paths
 lib_dir = os.getcwd()  # Changed from os.path.dirname(os.path.realpath(__file__))
-custom_lib_name = "common_lib_wifi_debugger"
+custom_lib_name = "ProjectUtils-esp32"
 source_data_path = os.path.join(lib_dir, "lib", custom_lib_name, 'data')
 target_data_path = os.path.abspath(os.path.join(lib_dir, 'data'))
 
