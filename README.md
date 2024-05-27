@@ -1,6 +1,6 @@
 # How to use this library 
 
-Include the following in your ´main.h´ file
+Include the following in your `main.h` file
 
 ```
 // ---------- DEBUG AND SYSTEM CONTROL ---------- //
