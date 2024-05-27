@@ -25,4 +25,4 @@ Include the following in your `main.h` file
 
 Add the following line to your main platformio.ini file
 
-`extra_scripts = pre:lib/common_lib_wifi_debugger/copy_lib_data.py`
+`extra_scripts = pre:lib/ProjecUtils-esp32/copy_lib_data.py`
