@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Device Settings</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" type="text/css" href="style.css">
+</head>
+<body>
+<div class="topnav">
+  <h1>Device Settings</h1>
+</div>
+<div class="content">
+  <div class="card-grid">
+    <div class="card">
+      <div class="settings">
+        <form action="/" method="POST">
+          <h2>General</h2>
+          <div class="twocolumns">
+            <div class="setting_box">
+              <label for="deviceName">Device Name</label>
+            </div>
+            <div class="setting_box">
+              <input type="text" id="deviceName" name="deviceName" value=""><br>
+            </div>
+          </div>
+          <br><br>
+
+          <h2>Network</h2>
+
+          <div class="twocolumns">
+            <div class="setting_box">
+              <label for="ssid">WiFi Name</label>
+            </div>
+            <div class="setting_box">
+              <input type="text" id="ssid" name="ssid"><br>
+            </div>
+          </div>
+
+          <div class="twocolumns">
+            <div class="setting_box">
+              <label for="pass">Password</label>
+            </div>
+            <div class="setting_box">
+              <input type="password" id="pass" name="pass"><br>
+            </div>
+          </div>
+
+          <div class="twocolumns">
+            <div class="setting_box">
+              <label for="ip">IP Address</label>
+            </div>
+            <div class="setting_box">
+              <input type="text" id="ip" name="ip"><br>
+            </div>
+          </div>
+
+          <div class="twocolumns">
+            <div class="setting_box">
+              <label for="gateway">Gateway Address</label>
+            </div>
+            <div class="setting_box">
+              <input type="text" id="gateway" name="gateway"><br>
+            </div>
+          </div>
+          <br><br>
+
+          <input type="submit" value="Submit">
+          <br><br><br>
+
+          <hr width="auto" />
+        </form>
+
+        <h2>Advanced</h2>
+
+        <div class="twocolumns">
+          <div>
+            <label for="autoUpdates">Automatic Updates</label>
+          </div>
+          <div class="setting_box">
+            <label class="switch">
+              <input type="checkbox" id="autoUpdates" onclick="toggleCheckbox(this)">
+              <span class="slider round"></span>
+            </label>
+          </div>
+        </div>
+        <br>
+
+        <button id="checkForUpdates" onclick="handleButtonClick(this)">Check for Updates</button>
+        <br><br>
+
+        <div class="twocolumns">
+          <div class="setting_box">
+            <label for="specificFW">Install Firmware Version:</label>
+          </div>
+          <div class="setting_box">
+            <input type="text" id="specificFW" name="specificFW" value="" width="10px">
+          </div>
+          <div>
+            <button onclick="installDesFW(this)">Install</button>
+          </div>
+        </div>
+        <br><br>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  fetch("/settings/general-config")
+    .then(response => response.text())
+    .then(responseBody => {
+      const generalConfig = responseBody.split("\n");
+      document.getElementById("deviceName").value = generalConfig[0];
+    });
+
+  fetch("/settings/wifi-config")
+    .then(response => response.text())
+    .then(responseBody => {
+      const wifiCredentials = responseBody.split("\n");
+      document.getElementById("ssid").value = wifiCredentials[0];
+      document.getElementById("pass").value = wifiCredentials[1];
+      document.getElementById("ip").value = wifiCredentials[2];
+      document.getElementById("gateway").value = wifiCredentials[3];
+    });
+
+  fetch("/settings/autoupdate")
+    .then(response => response.text())
+    .then(responseBody => {
+      const autoUpdateConfig = responseBody.split("\n");
+      document.getElementById("autoUpdates").checked = autoUpdateConfig[0] === "1";
+    });
+
+  function toggleCheckbox(element) {
+    let xhr = new XMLHttpRequest();
+    const payload = "/settings/advanced?" + element.id + "=" + element.checked;
+    xhr.open("GET", payload, true);
+    xhr.send();
+
+    fetch("/settings/autoupdate")
+      .then(response => response.text())
+      .then(responseBody => {
+        const autoUpdateConfig = responseBody.split("\n");
+        document.getElementById("autoUpdates").checked = autoUpdateConfig[0] === "1";
+      });
+  }
+
+  let newVersionAvailable = false;
+  let newVersion = '';
+
+  function handleButtonClick(element) {
+    if (newVersionAvailable) {
+      installFW(element);
+    } else {
+      checkForUpdates();
+    }
+  }
+
+  function checkForUpdates() {
+    const button = document.getElementById('checkForUpdates');
+    button.classList.remove('green', 'red', 'orange');
+    button.textContent = `Checking...`;
+    fetch('/settings/newversion')
+      .then(response => response.text())
+      .then(responseBody => {
+        newVersion = responseBody.split("\n")[0];
+        button.classList.remove('green', 'red', 'orange');
+        if (newVersion === "0") {
+          button.textContent = "Already on latest Version!";
+          button.classList.add('green');
+          newVersionAvailable = false;
+        } else if (newVersion === "1") {
+          button.textContent = "Error";
+          button.classList.add('red');
+          newVersionAvailable = false;
+        } else {
+          button.textContent = `${newVersion} - Install now`;
+          button.classList.add('orange');
+          newVersionAvailable = true;
+        }
+      })
+      .catch(error => {
+        console.error('Error fetching firmware version:', error);
+        button.textContent = "Error fetching version";
+        button.classList.add('red');
+        newVersionAvailable = false;
+      });
+  }
+
+  function installDesFW(element) {
+    newVersion = document.getElementById("specificFW").value;
+    if (newVersion != "") {
+      installFW(element);
+    }
+  }
+
+  function installFW(element) {
+    const button = element;
+    button.textContent = `Installing ${newVersion}...`;
+    button.classList.remove('green', 'red');
+    button.classList.add('orange');
+    
+    let xhr = new XMLHttpRequest();
+    const payload = "/settings/advanced?" + "desiredVersion=" + newVersion;
+    xhr.open("GET", payload, true);
+    xhr.onreadystatechange = function() {
+      if (xhr.readyState === XMLHttpRequest.DONE) {
+        if (xhr.status === 200 && xhr.responseText === "OK") {
+          button.textContent = `${newVersion} installed successfully`;
+          button.classList.remove('orange');
+          button.classList.add('green');
+          newVersionAvailable = false;
+        } else {
+          console.error('Installation failed with status:', xhr.status);
+          button.textContent = xhr.responseText === "Failed" ? "Installation failed" : "No response";
+          button.classList.remove('green', 'orange');
+          button.classList.add('red');
+          newVersionAvailable = false;
+        }
+      }
+    };
+
+    xhr.send();
+  }
+
+</script>
+
+</body>
+</html>
