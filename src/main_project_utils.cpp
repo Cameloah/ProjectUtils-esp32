@@ -55,4 +55,5 @@ void project_utils_init(const String& ap_name = "New ESP-Device") {
 void project_utils_update() {
     network_ota_update();
     network_manager_update();
+    server_update();
 }

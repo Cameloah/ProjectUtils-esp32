@@ -29,6 +29,12 @@ const char* WIFI_INPUT_4 = "gateway";
 
 
 
+// ------------ variables ------------- //
+bool _flag_do_update = false;
+String _des_fw_version;
+
+
+
 // ---------- web functions ----------- //
 
 void webfct_settings_serve(AsyncWebServerRequest *request) {
@@ -124,16 +130,11 @@ void webfct_adv_settings_get(AsyncWebServerRequest *request){
     }
 
     else if (request->hasParam("desiredVersion")) {
-        String msg = "Trying to install desired FW version " + request->getParam("desiredVersion")->value();
-        DualSerial.println(msg);
-        
-        uint8_t retval = github_update_firmwareUpdate(request->getParam("desiredVersion")->value().c_str());
-        if (retval != GITHUB_UPDATE_ERROR_NO_ERROR) {
-            ram_log_notify(RAM_LOG_ERROR_GITHUB_UPDATE, retval);
-            request->send(200, "text/plain", "Failed");
-        }
+        _des_fw_version = request->getParam("desiredVersion")->value();
+        _flag_do_update = true;
     }
-    request->send(200, "text/plain", "OK");
+
+    // request->send(200, "text/plain", "OK");
 }
 
 
@@ -148,9 +149,12 @@ void server_setup() {
         return;
     }
 
+
     server.serveStatic("/", SPIFFS, "/");                                                                           // makes everything available in the browser
 
+    
     server.on("/settings/advanced", HTTP_GET, webfct_adv_settings_get);                                             // Listens for GET requests and saves advanced settings
+    
     server.on("/", HTTP_POST, webfct_settings_post);                                                                // listens for POST requests and saves user wifi credentials    
     
     server.on("/settings/general-config", HTTP_GET, webfct_get_general_config);                                     // publishes general configuration
@@ -162,4 +166,17 @@ void server_setup() {
 
 
     server.begin();
+}
+
+
+void server_update() {
+    // do update to desired fw when needed
+    if (_flag_do_update) {String msg = "Trying to install desired FW version " + _des_fw_version;
+        _flag_do_update = false;
+        DualSerial.println(msg);
+
+        uint8_t retval = github_update_firmwareUpdate(_des_fw_version.c_str());
+        if (retval != GITHUB_UPDATE_ERROR_NO_ERROR)
+            ram_log_notify(RAM_LOG_ERROR_GITHUB_UPDATE, retval);
+    }
 }
