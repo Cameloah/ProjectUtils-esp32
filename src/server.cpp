@@ -143,7 +143,8 @@ void webfct_adv_settings_get(AsyncWebServerRequest *request){
 void server_setup() {
     //initialize spiffs
     if(!SPIFFS.begin(true)){
-        ram_log_notify(RAM_LOG_INFO, "SPIFFS failed to initialize!");
+        ram_log_notify(RAM_LOG_INFO, "SPIFFS failed to initialize!", true);
+        server.begin();
         return;
     }
 
