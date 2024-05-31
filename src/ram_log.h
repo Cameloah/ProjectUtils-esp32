@@ -16,10 +16,11 @@ typedef enum{
     RAM_LOG_ERROR_MEMORY                = 0x04,
     RAM_LOG_ERROR_GPS_MANAGER           = 0x05,
     RAM_LOG_ERROR_SYSTEM                = 0x06,
+    RAM_LOG_ERROR_TIME                  = 0x07
 } RAM_LOG_ITEM_t;
 
 typedef struct {
-    unsigned long int timestamp;
+    int64_t timestamp;
     RAM_LOG_ITEM_t item_type;
     String payload;
 } ram_log_item_t;
@@ -49,6 +50,6 @@ void ram_log_print_log();
 
 /// \brief returns the current uptime in a nice string format
 ///
-/// \param sys_ms current system time such as millis()
+/// \param sys_ms current system time such as esp_timer_get_time()
 /// \return string of time format
-String ram_log_time_str(unsigned long int sys_ms);
+String ram_log_time_str(int64_t sys_ms);

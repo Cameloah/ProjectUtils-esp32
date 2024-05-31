@@ -4,6 +4,7 @@
 
 #include "ram_log.h"
 #include "webserial_monitor.h"
+#include "time_module.h"
 
 ram_log_item_t _ringbuffer[RAM_LOG_RINGBUFFER_LEN];
 
@@ -13,7 +14,7 @@ uint8_t _ringbuffer_item_count = 0;
 
 void ram_log_notify(RAM_LOG_ITEM_t item_type, uint32_t module_error) {
     // save timestamp
-    _ringbuffer[_ringbuffer_item_index].timestamp = millis();
+    _ringbuffer[_ringbuffer_item_index].timestamp = esp_timer_get_time();
     // save item type
     _ringbuffer[_ringbuffer_item_index].item_type = item_type;
     // save payload as string
@@ -35,7 +36,7 @@ void ram_log_notify(RAM_LOG_ITEM_t item_type, uint32_t module_error) {
 
 void ram_log_notify(RAM_LOG_ITEM_t item_type, uint32_t module_error, const char *user_payload) {
     // save timestamp
-    _ringbuffer[_ringbuffer_item_index].timestamp = millis();
+    _ringbuffer[_ringbuffer_item_index].timestamp = esp_timer_get_time();
     // save item type
     _ringbuffer[_ringbuffer_item_index].item_type = item_type;
     // save payload as string
@@ -48,7 +49,7 @@ void ram_log_notify(RAM_LOG_ITEM_t item_type, uint32_t module_error, const char 
 
 void ram_log_notify(RAM_LOG_ITEM_t item_type, const char *user_payload, bool flag_print) {
     // save timestamp
-    _ringbuffer[_ringbuffer_item_index].timestamp = millis();
+    _ringbuffer[_ringbuffer_item_index].timestamp = esp_timer_get_time();
     // save item type
     _ringbuffer[_ringbuffer_item_index].item_type = item_type;
     // save payload as string
@@ -72,24 +73,31 @@ void ram_log_print_log() {
     payload += '\n';
 
     for (int item = 0; item < _ringbuffer_item_count; ++item) {
-        unsigned long seconds = _ringbuffer[item].timestamp / 1000;
-        uint16_t ms = _ringbuffer[item].timestamp % 1000;
-        uint8_t sec = seconds % 60; seconds /= 60;
-        uint8_t min = seconds % 60; seconds /= 60;
-        uint8_t hrs = seconds % 24; seconds /= 24;
-        uint16_t days = seconds;
+        
+        if(!time_module_is_init()) {
+            unsigned long seconds = (_ringbuffer[item].timestamp / 1000000);
 
-        // Build the timestamp string
-        payload += days;
-        payload += "d:";
-        payload += hrs;
-        payload += "h:";
-        payload += min;
-        payload += "m:";
-        payload += sec;
-        payload += "s:";
-        payload += ms;
-        payload += "ms ";
+            uint16_t ms = (_ringbuffer[item].timestamp / 1000) % 1000;
+            uint8_t sec = seconds % 60; seconds /= 60;
+            uint8_t min = seconds % 60; seconds /= 60;
+            uint8_t hrs = seconds % 24; seconds /= 24;
+            uint16_t days = seconds;
+
+            // Build the timestamp string
+            payload += days;
+            payload += "d:";
+            payload += hrs;
+            payload += "h:";
+            payload += min;
+            payload += "m:";
+            payload += sec;
+            payload += "s:";
+            payload += ms;
+            payload += "ms ";
+        }
+
+        else 
+            payload += time_convert_micros(_ringbuffer[item].timestamp) + " ";
 
         // Append log level and message
         if (_ringbuffer[item].item_type == RAM_LOG_INFO) {
@@ -115,9 +123,9 @@ void ram_log_print_log() {
     DualSerial.println(payload);
 }
 
-String ram_log_time_str(unsigned long int sys_ms) {
-    unsigned long int seconds = sys_ms / 1000;
-    uint16_t ms = sys_ms % 1000;
+String ram_log_time_str(int64_t sys_us) {
+    unsigned long int seconds = (sys_us / 1000000);
+    uint16_t ms = (sys_us /1000) % 1000;
     uint8_t sec = seconds % 60;		seconds /= 60;
     uint8_t min = seconds % 60;		seconds /= 60;
     uint8_t hrs = seconds % 24;     seconds /= 24;

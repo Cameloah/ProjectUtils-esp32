@@ -16,11 +16,6 @@
 #include "ram_log.h"
 #include "webserial_monitor.h"
 
-/*
-#define EEPROM_SIZE                                 128
-#define TIMEOUT_EEPROM_INIT_MS                      2000
-*/
-
 namespace std {
     template<class T>
     struct _Unique_if {

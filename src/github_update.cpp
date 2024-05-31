@@ -9,7 +9,8 @@
 #include <WiFiClientSecure.h>
 
 #include "github_update.h"
-#include "cert.h"
+
+
 
 String url_fw_bin = URL_FW_BIN;
 String url_fs_bin = URL_FS_BIN;

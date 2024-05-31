@@ -8,6 +8,7 @@
 #include "server.h"
 #include "memory_module.h"
 #include "github_update.h"
+#include "time_module.h"
 #include "../../../include/main.h"
 
 /*
@@ -31,6 +32,9 @@ void project_utils_init(const String& ap_name = "New ESP-Device") {
     // establish connection
     if((retval = network_manager_init(ap_name)) != NETWORK_MANAGER_ERROR_NO_ERROR) 
         ram_log_notify(RAM_LOG_ERROR_NETWORK_MANAGER, retval);
+
+    // init time module
+    time_module_init();
 
     // check for updates if configured
     if(*device_settings.getBool("autoUpdates") && network_manager_is_connected()) {
