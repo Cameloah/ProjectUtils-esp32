@@ -24,7 +24,7 @@ Some of the more intensive modules can be enabled/disabled as desired by the use
 It is highly recommended to use the PlatformIO extension for VSCode Studio or Clion in order to take full advantage of this library.
 
 ### 1. Get the files!
-include library as a git submodule to your existing PlatformIO project under `/lib/ProjectUtils-esp32`. Further information on how to do this can be found [here]([url](https://docs.platformio.org/en/latest/projectconf/sections/platformio/options/directory/lib_dir.html)).
+include library as a git submodule to your existing PlatformIO project under `/lib/ProjectUtils-esp32`. Further information on how to do this can be found [here]([https://docs.platformio.org/en/latest/projectconf/sections/platformio/options/directory/lib_dir.html]).
 
 ### 2. Setup platformIO configuration
 The library requires its own dependencies and web page data. It comes with a script that, when run during any Build action, transfers the required dependencies and web files to your main `platformio.ini` file and `/data` folder automatically.
