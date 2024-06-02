@@ -59,7 +59,6 @@ void webfct_get_wifi_cred(AsyncWebServerRequest *request) {
 }
 
 void webfct_get_autoupdate(AsyncWebServerRequest *request) {
-
     String payload = String(*device_settings.getBool("autoUpdates")) + "\n";
     request->send(200, "text/plain", payload);
 }
