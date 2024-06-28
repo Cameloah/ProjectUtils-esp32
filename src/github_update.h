@@ -4,8 +4,14 @@
 
 #pragma once
 
-#include "webserial_monitor.h"
+#include <Arduino.h>
+#include <WiFi.h>
+#include <HTTPClient.h>
+#include <HTTPUpdate.h>
+#include <WiFiClientSecure.h>
+
 #include "../../../include/version.h"
+#include "main_project_utils.h"
 
 #define URL_FW_VERSION "https://github.com/" GITHUB_REPO "/releases/latest"
 #define URL_FW_BIN "https://github.com/" GITHUB_REPO "/releases/download/<version>/" GITHUB_FW_BIN

@@ -4,8 +4,21 @@
 
 #pragma once
 
+#include "Arduino.h"
+#include <WiFi.h>
+#include <ESPAsyncWebServer.h>
+#include "SPIFFS.h"
+#include <AsyncTCP.h>
+#include <DNSServer.h>
+#include "EEPROM.h"
+
 #include "main_project_utils.h"
+#include "network_ota.h"
 #include "memory_module.h"
+#include "github_update.h"
+#include "ram_log.h"
+#include "lib_tools.h"
+#include "../../../include/main.h"
 
 extern MemoryModule wifi_config;
 extern MemoryModule wifi_info;

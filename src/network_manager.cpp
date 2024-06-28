@@ -4,21 +4,10 @@
 // In the future, it should be able to store multipe sets of wifi credentials, show available networks and give the option for static or dynamic IP addresses. 
 //
 
-#include <Arduino.h>
-#include <WiFi.h>
-#include <ESPAsyncWebServer.h>
-#include <AsyncTCP.h>
-#include "SPIFFS.h"
-#include <DNSServer.h>
-#include "EEPROM.h"
 
 #include "network_manager.h"
-#include "main_project_utils.h"
-#include "webserial_monitor.h"
-#include "ram_log.h"
-#include "memory_module.h"
-#include "lib_tools.h"
-#include "../../../include/main.h"
+
+#ifdef ENABLE_WIFI
 
 // ----------- DNS server ------------ //
 
@@ -222,3 +211,5 @@ void network_manager_update() {
     }
 #endif
 }
+
+#endif

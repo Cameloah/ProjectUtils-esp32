@@ -2,12 +2,6 @@
 // Created by Cameloah on 08/12/2022.
 //
 
-#include <Arduino.h>
-#include <WiFi.h>
-#include <HTTPClient.h>
-#include <HTTPUpdate.h>
-#include <WiFiClientSecure.h>
-
 #include "github_update.h"
 
 

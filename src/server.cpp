@@ -1,17 +1,6 @@
-#include "Arduino.h"
-#include <WiFi.h>
-#include <ESPAsyncWebServer.h>
-#include "SPIFFS.h"
-
-#include "webserial_monitor.h"
-#include "network_ota.h"
 #include "network_manager.h"
-#include "memory_module.h"
-#include "main_project_utils.h"
-#include "github_update.h"
 
-
-
+#ifdef ENABLE_WIFI
 // -------------- server -------------- //
 
 AsyncWebServer server(80);
@@ -169,13 +158,17 @@ void server_setup() {
 
 
 void server_update() {
-    // do update to desired fw when needed
-    if (_flag_do_update) {String msg = "Trying to install desired FW version " + _des_fw_version;
-        _flag_do_update = false;
-        DualSerial.println(msg);
+    #ifdef ENABLE_GITHUBUPDATE
+        // do update to desired fw when needed
+        if (_flag_do_update) {String msg = "Trying to install desired FW version " + _des_fw_version;
+            _flag_do_update = false;
+            DualSerial.println(msg);
 
-        uint8_t retval = github_update_firmwareUpdate(_des_fw_version.c_str());
-        if (retval != GITHUB_UPDATE_ERROR_NO_ERROR)
-            ram_log_notify(RAM_LOG_ERROR_GITHUB_UPDATE, retval);
-    }
+            uint8_t retval = github_update_firmwareUpdate(_des_fw_version.c_str());
+            if (retval != GITHUB_UPDATE_ERROR_NO_ERROR)
+                ram_log_notify(RAM_LOG_ERROR_GITHUB_UPDATE, retval);
+        }
+    #endif
 }
+
+#endif

@@ -4,23 +4,14 @@
 
 #pragma once
 
+#include <Arduino.h>
 #include <HardwareSerial.h>
+#include <WiFi.h>
+#include <AsyncTCP.h>
+#include <ESPAsyncWebServer.h>
+#include <WebSerial.h>
 
-
-class DualPrint : public HardwareSerial
-{
-public:
-    explicit DualPrint(int uartNr) : HardwareSerial(uartNr), use_webSerial(false) {}
-
-    size_t write(const uint8_t *buffer, size_t size) override;
-    int available() override;
-    size_t readBytes(char *buffer, size_t length) override;
-
-    bool use_webSerial;
-    String buffer_webserial;
-};
-
-extern DualPrint DualSerial;
+#include "main_project_utils.h"
 
 /// initializes the webserial service
 void webserial_monitor_init();
