@@ -31,7 +31,7 @@ The library requires its own dependencies and web page data. It comes with a scr
 
 For this, add the following line to your main platformio.ini file
 
-`extra_scripts = pre:lib/ProjecUtils-esp32/copy_lib_data.py`
+`extra_scripts = pre:lib/ProjectUtils-esp32/copy_lib_data.py`
 
 
 ### 3. Add control makros to your root project
