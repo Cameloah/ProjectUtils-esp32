@@ -4,7 +4,7 @@
 
 The ESP32 is a fantastic small microcontroller unit (MCU) that comes with fully configurable GPIOs, WiFi, Bluetooth LE, SPI, I2C, SPIFFS, etc. just to name a few features. It is certainly my favorite when it comes to small and bigger projects that require real-time processing. 
 
-A few features I use universally in almost all my projects. This external library bundles such capabilities in a pre-configured package in order to give ESP32 projects a kick-start.
+A few features I use universally in almost all my projects can be found in this custom library. A pre-configured package in order to give ESP32 projects a kick-start.
 
 ## Features
 - Network managment incl. captive portal AP and web page to configure WiFi credentials
