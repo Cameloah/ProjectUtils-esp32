@@ -20,7 +20,7 @@ AsyncWebServer server(80);
 
 // ---------- http parameters --------- //
 
-const char* GENERAL_INPUT_1 = "Device Name";
+const char* GENERAL_INPUT_1 = "deviceName";
 
 const char* WIFI_INPUT_1 = "ssid";
 const char* WIFI_INPUT_2 = "pass";

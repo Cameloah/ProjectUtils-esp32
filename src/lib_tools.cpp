@@ -21,3 +21,17 @@ bool otherThanAsterix(const String &str) {
     }
     return false;
 }
+
+String removeWhitespaceAndConvertToLower(const String &str) {
+    String result;
+    for (int i = 0; i < str.length(); i++) {
+        char c = str.charAt(i);
+        if (!isWhitespace(c)) {
+            if (isUpperCase(c)) {
+                c = toLowerCase(c);
+            }
+            result += c;
+        }
+    }
+    return result;
+}

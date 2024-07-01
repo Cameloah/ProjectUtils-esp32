@@ -11,3 +11,9 @@
 /// @param str string to be checked
 /// @return true if contains non whitespace characters
 bool otherThanWhitespace(const String &str);
+
+/// @brief removes whitespace characters and converts string to lowercase
+///
+/// @param str string to be modified
+/// @return modified string with whitespace removed and converted to lowercase
+String removeWhitespaceAndConvertToLower(const String &str);

@@ -45,7 +45,7 @@ bool flag_wifi_config_loaded = false;
 
 // --------- member functions --------- //
 
-NETWORK_MANAGER_ERROR_t wifi_connect() {
+NETWORK_MANAGER_ERROR_t network_manager_wifi_connect() {
     // if we are in access point mode we don't look for Wi-Fi
     if (WiFi.getMode() == 2)
         return NETWORK_MANAGER_ERROR_CONNECT;
@@ -72,6 +72,9 @@ NETWORK_MANAGER_ERROR_t wifi_connect() {
         DualSerial.println("Static IP failed to configure");
         return NETWORK_MANAGER_ERROR_CONFIG;
     }
+
+#else
+    WiFi.config(INADDR_NONE, INADDR_NONE, INADDR_NONE, INADDR_NONE);
 #endif
 
     WiFi.begin(wifi_config.getString("ssid").c_str(), wifi_config.getString("password").c_str());
@@ -94,7 +97,10 @@ NETWORK_MANAGER_ERROR_t wifi_connect() {
 #endif
 
     DualSerial.println("");
-    String payload = "Connected to " + wifi_config.getString("ssid") + ", IP: " + WiFi.localIP().toString() + ", Wifi mode: " + network_manager_get_mode();
+    String payload = "Connected to " + wifi_config.getString("ssid")
+                    + ", IP: " + WiFi.localIP().toString() +
+                    ", Hostname: https://" + WiFi.getHostname() + ".local/" +
+                    ", Wifi mode: " + network_manager_get_mode();
     ram_log_notify(RAM_LOG_INFO, payload.c_str(), true);
 
     return NETWORK_MANAGER_ERROR_NO_ERROR;
@@ -180,8 +186,11 @@ NETWORK_MANAGER_ERROR_t network_manager_init(const String& ap_name) {
         
 
     wifi_info.set("APname", ap_name);
+    String hostname = removeWhitespaceAndConvertToLower(wifi_info.getString("deviceName"));
+    WiFi.setHostname(hostname.c_str());
+    WiFi.mode(WIFI_STA);
 
-    // try to load wifi config and credentials from wifi manager
+    // try to load wifi config and credentials
     if ((retval = _wifi_load(&wifi_config)) == NETWORK_MANAGER_ERROR_NO_ERROR) {
         // we have data, therefore connect normally
         String output = "Loaded WiFi: '" + wifi_config.getString("ssid") + "'\n" +
@@ -192,7 +201,7 @@ NETWORK_MANAGER_ERROR_t network_manager_init(const String& ap_name) {
         std::string device_ip = wifi_config.getString("localIP").c_str();
 
         // establish connection, spawn AP anyway if wanted
-        if ((retval = wifi_connect()) == NETWORK_MANAGER_ERROR_CONNECT || AP_VERBOSITY == 2)
+        if ((retval = network_manager_wifi_connect()) == NETWORK_MANAGER_ERROR_CONNECT || AP_VERBOSITY == 2)
             // we couldn't connect, use AP
             if((retval = _wifi_manager_AP(wifi_info.getString("deviceName"))) != NETWORK_MANAGER_ERROR_NO_ERROR) return retval;
     }
