@@ -84,7 +84,58 @@ Congratulations, now you are all set!
 
 ## Quick start guide
 
+### Tools
+```
+DualSerial.begin(115200);
+DualSerial.println("Hello World");
+```
+`DualSerial` is a drop-in replacement for Arduinos `Serial` class, extending the serial communication to a webinterface. Once wifi is connected, a console is available under `192.168.xxx.xxx/webserial`. Any message, either from the serial communication or from the web console is reflected on both channels simultaneously and can be used just like any other serial communication.
+
+`ramlog` is a logbook for runtime events. It is volatile, that means it will not persist after reboot. It is incredibly useful to log and debug startup procedures or other events. The ramlog can hold 30 entries before wrapping around. Entries are referenced using a time stamp. Normally that is in runtime format. Once wifi is connected, timestamps are converted to local time.
+
+To create an entry, one can pass predefined error handles, even with additional strings:
+
+```
+ram_log_notify(RAM_LOG_ERROR_MEMORY, example_error);
+ram_log_notify(RAM_LOG_ERROR_MEMORY, example_error, "some_string");
+```
+
+or use custom messages. If `flag_print` is set, the message will also be printed to the serial comms immediately:
+```
+ram_log_notify(RAM_LOG_INFO, "hello world!, flag_print=true");
+```
+
+The ramlog can be printed using `ram_log_print_log()`
+
 ### WiFi
+
+```
+#include "main_project_utils.h"
+#include "ramlog.h"
+
+void serup() {
+  DualSerial.println("Starting Wifi...");
+  project_utils_init("My new ESP32");
+}
+
+void loop() {
+  project_utils_update();
+}
+```
+
+The `project_utils_init()` initializes all systems and tools according to settings in `main.h`. It takes the general device name that is used as a name for the initial access point. `project_utils_update();` needs to be called periodically.
+
+After initial bootup, the ESP32 creates an AP with the general device name plus a random number. This way multiple devices can be setup up at once without interfering.
+
+1. Connect the the AP. A captive portal should appear.
+2. Setup a unique device name and the wifi credentials of your network. Ignore the other settings and submit.
+3. connect to the device settings using your network. The IP address is printed over serial. Modern routers support DNS, which allows you to reach your device using the unique device name instead of the ip address.
+```
+https://example-esp/settings
+```
+4. visit advanced settings such as auto updates.
+5. connect the device to your pc using serial and go to `https://example-esp/webserial`. anything written in either one should reflect in both channels.
+
 
 WIP
 
