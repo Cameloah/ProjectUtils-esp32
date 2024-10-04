@@ -9,7 +9,7 @@
 #include "memory_module.h"
 #include "main_project_utils.h"
 #include "github_update.h"
-
+#include "ram_log.h"
 
 
 // -------------- server -------------- //

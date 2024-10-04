@@ -1,3 +1,4 @@
+
 //
 // Created by Cameloah on 29.10.2023.
 //
@@ -13,8 +14,6 @@
 #include <vector>
 #include <memory>
 
-#include "ram_log.h"
-#include "webserial_monitor.h"
 
 namespace std {
     template<class T>
@@ -232,7 +231,7 @@ public:
 
 class MemoryModule {
 public:
-    MemoryModule();
+    MemoryModule(String name);
 
     // For int
     void addParameter(const String &key, int value) {
@@ -260,7 +259,7 @@ public:
     }
 
     esp_err_t save(const String &key) {
-        if ((class_error = nvs_open("storage", NVS_READWRITE, &my_handle)) != ESP_OK)
+        if ((class_error = nvs_open_from_partition("nvs2", storage_name.c_str(), NVS_READWRITE, &my_handle)) != ESP_OK)
             return class_error;
 
         class_error = ESP_ERR_NOT_FOUND;
@@ -378,7 +377,7 @@ public:
     }
 
     esp_err_t load(const String &key) {
-        if ((class_error = nvs_open("storage", NVS_READONLY, &my_handle)) != ESP_OK)
+        if ((class_error = nvs_open_from_partition("nvs2", storage_name.c_str(), NVS_READONLY, &my_handle)) != ESP_OK)
             return class_error;
 
         class_error = ESP_ERR_NOT_FOUND;
@@ -396,7 +395,7 @@ public:
     }
 
     esp_err_t saveAll() {
-        if ((class_error = nvs_open("storage", NVS_READWRITE, &my_handle)) != ESP_OK)
+        if ((class_error = nvs_open_from_partition("nvs2", storage_name.c_str(), NVS_READWRITE, &my_handle)) != ESP_OK)
             return class_error;
 
         for (const auto &param: _parameters) {
@@ -408,7 +407,7 @@ public:
     }
 
     esp_err_t loadAll() {
-        if ((class_error = nvs_open("storage", NVS_READONLY, &my_handle)) != ESP_OK)
+        if ((class_error = nvs_open_from_partition("nvs2", storage_name.c_str(), NVS_READONLY, &my_handle)) != ESP_OK)
             return class_error;
 
         for (const auto &param: _parameters) {
@@ -420,7 +419,7 @@ public:
     }
 
     esp_err_t loadAllStrict() {
-        if ((class_error = nvs_open("storage", NVS_READONLY, &my_handle)) != ESP_OK)
+        if ((class_error = nvs_open_from_partition("nvs2", storage_name.c_str(), NVS_READONLY, &my_handle)) != ESP_OK)
             return class_error;
 
         for (const auto &param: _parameters) {
@@ -434,18 +433,37 @@ public:
         return class_error;
     }
 
+    esp_err_t saveRaw(const String &key, uint8_t* value, int size) {
+        if ((class_error = nvs_open_from_partition("nvs2", storage_name.c_str(), NVS_READWRITE, &my_handle)) != ESP_OK)
+            return class_error;
+
+        class_error = nvs_set_blob(my_handle, key.c_str(), value, size);
+        nvs_commit(my_handle);
+        nvs_close(my_handle);
+        return class_error;
+    }
+
+    esp_err_t loadRaw(const String &key, uint8_t* value, int size) {
+        if ((class_error = nvs_open_from_partition("nvs2", storage_name.c_str(), NVS_READONLY, &my_handle)) != ESP_OK)
+            return class_error;
+
+        size_t required_size = size;
+        class_error = nvs_get_blob(my_handle, key.c_str(), value, &required_size);
+        nvs_close(my_handle);
+        return class_error;
+    }
+
 private:
     std::vector<std::unique_ptr<Parameter>> _parameters;
     esp_err_t class_error;
     nvs_handle my_handle;
+    String storage_name;
 
     void setKeyNotFound(const String &key) const {
-        ram_log_notify(RAM_LOG_ERROR_MEMORY, MEMORY_MODULE_ERROR_SET_NOT_FOUND, String("Parameter: '" + key + "'").c_str());
+        return; //ram_log_notify(RAM_LOG_ERROR_MEMORY, MEMORY_MODULE_ERROR_SET_NOT_FOUND, String("Parameter: '" + key + "'").c_str());
     }
 
     void loadKeyNotFound(const String &key) const {
-        ram_log_notify(RAM_LOG_ERROR_MEMORY, MEMORY_MODULE_ERROR_LOAD_NOT_FOUND, String("Parameter: '" + key + "'").c_str());
+        return; //ram_log_notify(RAM_LOG_ERROR_MEMORY, MEMORY_MODULE_ERROR_LOAD_NOT_FOUND, String("Parameter: '" + key + "'").c_str());
     }
 };
-
-void memory_module_init1();

@@ -29,8 +29,8 @@ DNSServer dnsServer;
 
 // ---------- wifi variables ---------- //
 
-MemoryModule wifi_config;
-MemoryModule wifi_info;
+MemoryModule wifi_config("project_utils");
+MemoryModule wifi_info("project_utils");
 
 int timer_wifi_connect = 0;
 
