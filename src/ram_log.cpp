@@ -11,36 +11,36 @@ ram_log_item_t _ringbuffer[RAM_LOG_RINGBUFFER_LEN];
 uint8_t _ringbuffer_item_index = 0;
 uint8_t _ringbuffer_item_count = 0;
 
+String hex_string(uint32_t num) {
+    String hex = String(num, HEX);
+    if (hex.length() == 1)
+        hex = "0" + hex;
+    return "0x" + hex;
+}
 
-void ram_log_notify(RAM_LOG_ITEM_t item_type, uint32_t module_error) {
+void ram_log_notify(RAM_LOG_ITEM_t item_type, uint32_t module_error, const char *user_payload, bool flag_print) {
     // save timestamp
     _ringbuffer[_ringbuffer_item_index].timestamp = esp_timer_get_time();
     // save item type
     _ringbuffer[_ringbuffer_item_index].item_type = item_type;
     // save payload as string
+    String module_error_str = hex_string(module_error);
+
     switch (item_type) {
-        // TODO: write proper parser
-        // case RAM_LOG_ERROR_MEMORY:
-        //     _ringbuffer[_ringbuffer_item_index].payload = esp_err_to_name(user_payload);
-        //     break;
+        //TODO: write proper parser
+        case RAM_LOG_ERROR_MEMORY:
+            _ringbuffer[_ringbuffer_item_index].payload = module_error_str + "/" + esp_err_to_name(module_error);
+            if (user_payload != nullptr)
+                _ringbuffer[_ringbuffer_item_index].payload += ", " + String(user_payload);
+            break;
 
         default:
-            _ringbuffer[_ringbuffer_item_index].payload = String(module_error);
+            _ringbuffer[_ringbuffer_item_index].payload = module_error_str;
 
     }
 
-    // increase item index
-    _ringbuffer_item_index = (_ringbuffer_item_index + 1) % RAM_LOG_RINGBUFFER_LEN;
-    _ringbuffer_item_count = (_ringbuffer_item_count > RAM_LOG_RINGBUFFER_LEN) ? RAM_LOG_RINGBUFFER_LEN : _ringbuffer_item_count+1;
-}
-
-void ram_log_notify(RAM_LOG_ITEM_t item_type, uint32_t module_error, const char *user_payload) {
-    // save timestamp
-    _ringbuffer[_ringbuffer_item_index].timestamp = esp_timer_get_time();
-    // save item type
-    _ringbuffer[_ringbuffer_item_index].item_type = item_type;
-    // save payload as string
-    _ringbuffer[_ringbuffer_item_index].payload = String(module_error) + ", " + String(user_payload);
+    if (flag_print)
+        DualSerial.println(hex_string(item_type) + "/" + log_item_to_name(item_type) + " - " + _ringbuffer[_ringbuffer_item_index].payload);
 
     // increase item index
     _ringbuffer_item_index = (_ringbuffer_item_index + 1) % RAM_LOG_RINGBUFFER_LEN;
@@ -110,7 +110,7 @@ void ram_log_print_log() {
         
         else {
             payload += "ERROR: ";
-            payload += _ringbuffer[item].item_type;
+            payload += hex_string(_ringbuffer[item].item_type) + "/" + log_item_to_name(_ringbuffer[item].item_type);
             payload += " ";
         }
 
@@ -132,4 +132,27 @@ String ram_log_time_str(int64_t sys_us) {
     uint16_t d = seconds;
     String time_str = String(d) + "d:" + String(hrs) + "h:" + String(min) + "m:" + String(sec) + "s:" + String(ms) + "ms";
     return time_str;
+}
+
+String log_item_to_name(RAM_LOG_ITEM_t item) {
+    switch (item) {
+        case RAM_LOG_INFO:
+            return "INFO";
+        case RAM_LOG_WARNING:
+            return "WARNING";
+        case RAM_LOG_ERROR_NETWORK_MANAGER:
+            return "NETWORK_MANAGER";
+        case RAM_LOG_ERROR_GITHUB_UPDATE:
+            return "GITHUB_UPDATE";
+        case RAM_LOG_ERROR_MEMORY:
+            return "MEMORY";
+        case RAM_LOG_ERROR_GPS_MANAGER:
+            return "GPS_MANAGER";
+        case RAM_LOG_ERROR_SYSTEM:
+            return "SYSTEM";
+        case RAM_LOG_ERROR_TIME:
+            return "TIME";
+        default:
+            return "UNKNOWN";
+    }
 }
