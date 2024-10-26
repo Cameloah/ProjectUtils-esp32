@@ -1,5 +1,5 @@
 #include "time_module.h"
-
+#include "ram_log.h"
 
 
 // ------------- variables ------------- //

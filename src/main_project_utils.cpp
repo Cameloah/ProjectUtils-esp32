@@ -9,6 +9,7 @@
 #include "memory_module.h"
 #include "github_update.h"
 #include "time_module.h"
+#include "ram_log.h"
 #include "../../../include/main.h"
 
 /*
@@ -17,7 +18,7 @@
  */
 
 
-MemoryModule device_settings;
+MemoryModule device_settings("project_utils");
 
 // --------- member functions ----------- //
 

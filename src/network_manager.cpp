@@ -29,8 +29,8 @@ DNSServer dnsServer;
 
 // ---------- wifi variables ---------- //
 
-MemoryModule wifi_config;
-MemoryModule wifi_info;
+MemoryModule wifi_config("project_utils");
+MemoryModule wifi_info("project_utils");
 
 int timer_wifi_connect = 0;
 
@@ -217,17 +217,18 @@ NETWORK_MANAGER_ERROR_t network_manager_init(const String& ap_name) {
 void network_manager_update() {
     if (flag_ap_active)
         dnsServer.processNextRequest();
-        
 
 #ifdef AP_TIMEOUT
     if (flag_ap_active && millis() > AP_TIMEOUT) {
-        // Mr. Gorbatschow, tear down that Access Point
-        ram_log_notify(RAM_LOG_INFO, "Stopping access point", true);
-        dnsServer.stop();
-        WiFi.mode(WIFI_STA);
-        WiFi.disconnect();
-        flag_ap_active = false;
-        wifi_handler_connect();
+        // Check if there are any clients connected
+        if (WiFi.softAPgetStationNum() == 0) {
+            // Mr. Gorbatschow, tear down that Access Point
+            ram_log_notify(RAM_LOG_INFO, "Stopping access point", true);
+            //dnsServer.stop();
+            WiFi.mode(WIFI_STA);
+            //WiFi.disconnect();
+            flag_ap_active = false;
+        }
     }
 #endif
 }

@@ -1,3 +1,4 @@
+
 //
 // Created by Cameloah on 29.10.2023.
 //
@@ -13,8 +14,6 @@
 #include <vector>
 #include <memory>
 
-#include "ram_log.h"
-#include "webserial_monitor.h"
 
 namespace std {
     template<class T>
@@ -65,7 +64,8 @@ enum class ParameterType {
     FLOAT,
     DOUBLE,
     STRING,
-    BOOL
+    BOOL,
+    BYTEARRAY
 };
 
 class Parameter {
@@ -229,10 +229,42 @@ public:
     ParameterType getType() const override { return ParameterType::BOOL; }
 };
 
+class ParameterRaw : public Parameter {
+public:
+    std::unique_ptr<uint8_t[]> value;
+    size_t size;
+
+    ParameterRaw(String key, const uint8_t* val, size_t sz) : Parameter(std::move(key)), size(sz) {
+        value = std::make_unique<uint8_t[]>(size);
+        memcpy(value.get(), val, size);
+    }
+
+    esp_err_t save(nvs_handle handle) const override {
+        return nvs_set_blob(handle, key.c_str(), value.get(), size);
+    }
+
+    esp_err_t load(nvs_handle handle) override {
+        size_t required_size = size;
+        return nvs_get_blob(handle, key.c_str(), value.get(), &required_size);
+    }
+
+    void setValue(void *newValue) override {
+        // auto newVal = static_cast<std::pair<uint8_t*, size_t>*>(newValue);
+        // size = newVal->second;
+        value = std::make_unique<uint8_t[]>(size);
+        memcpy(value.get(), newValue, size);
+    }
+
+    void *getValue() const override {
+        return (void *) value.get();
+    }
+
+    ParameterType getType() const override { return ParameterType::BYTEARRAY; }
+};
 
 class MemoryModule {
 public:
-    MemoryModule();
+    MemoryModule(String name);
 
     // For int
     void addParameter(const String &key, int value) {
@@ -259,21 +291,12 @@ public:
         _parameters.push_back(std::make_unique<ParameterBool>(key, value));
     }
 
-    esp_err_t save(const String &key) {
-        if ((class_error = nvs_open("storage", NVS_READWRITE, &my_handle)) != ESP_OK)
-            return class_error;
-
-        class_error = ESP_ERR_NOT_FOUND;
-
-        for (const auto &param: _parameters) {
-            if (param->key == key) {
-                class_error = param->save(my_handle);
-                break; // Break after the parameter is found and saved
-            }
-        }
-        nvs_close(my_handle);
-        return class_error;
+    // For raw data
+    void addParameter(const String &key, const uint8_t *value, size_t size) {
+        _parameters.push_back(std::make_unique<ParameterRaw>(key, value, size));
     }
+
+    esp_err_t save(const String &key);
 
     esp_err_t set(const String &key, int value, bool saveImmediately = false) {
         return setByPointer(key, &value, ParameterType::INT, saveImmediately);
@@ -295,157 +318,39 @@ public:
         return setByPointer(key, &value, ParameterType::BOOL, saveImmediately);
     }
 
-    esp_err_t setByPointer(const String &key, void *newValue, ParameterType newType, bool saveImmediately = false) {
-        class_error = ESP_ERR_NOT_FOUND;
-        for (const auto &param: _parameters) {
-            if (param->key == key) {
-                if (param->getType() == newType) {
-                    param->setValue(newValue);
-                    class_error = ESP_OK;
-                    if (saveImmediately) {
-                        class_error = save(key);
-                    }
-                }
-                else {
-                    class_error = ESP_ERR_INVALID_ARG;
-                }
-                break;
-            }
-        }
-        if (class_error == ESP_ERR_NOT_FOUND)
-            setKeyNotFound(key);
-        return class_error;
+    esp_err_t set(const String &key, uint8_t* value, bool saveImmediately = false) {
+        return setByPointer(key, value, ParameterType::BYTEARRAY, saveImmediately);
     }
 
-    void *get(const String &key) const {
-        for (const auto &param: _parameters) {
-            if (param->key == key) {
-                return param->getValue();
-            }
-        }
-        loadKeyNotFound(key);
-        return nullptr; // Or handle the key-not-found case as needed
-    }
+    esp_err_t setByPointer(const String &key, void *newValue, ParameterType newType, bool saveImmediately = false);
 
-    int *getInt(const String &key) const {
-        for (const auto &param: _parameters) {
-            if (param->key == key && param->getType() == ParameterType::INT) {
-                return static_cast<int*>(param->getValue());
-            }
-        }
-        loadKeyNotFound(key);
-        return nullptr; // Or handle the key-not-found case as needed
-    }
+    void *get(const String &key) const;
 
-    float *getFloat(const String &key) const {
-        for (const auto &param: _parameters) {
-            if (param->key == key && param->getType() == ParameterType::FLOAT) {
-                return static_cast<float*>(param->getValue());
-            }
-        }
-        loadKeyNotFound(key);
-        return nullptr; // Or handle the key-not-found case as needed
-    }
+    int *getInt(const String &key) const;
 
-    double *getDouble(const String &key) const {
-        for (const auto &param: _parameters) {
-            if (param->key == key && param->getType() == ParameterType::DOUBLE) {
-                return static_cast<double*>(param->getValue());
-            }
-        }
-        loadKeyNotFound(key);
-        return nullptr; // Or handle the key-not-found case as needed
-    }
+    float *getFloat(const String &key) const;
 
-    String getString(const String &key) const {
-        for (const auto &param: _parameters) {
-            if (param->key == key && param->getType() == ParameterType::STRING) {
-                return *static_cast<String*>(param->getValue());
-            }
-        }
-        loadKeyNotFound(key);
-        return "String not found!"; // Or handle the key-not-found case as needed
-    }
+    double *getDouble(const String &key) const;
 
-    bool *getBool(const String &key) const {
-        for (const auto &param: _parameters) {
-            if (param->key == key && param->getType() == ParameterType::BOOL) {
-                return static_cast<bool*>(param->getValue());
-            }
-        }
-        loadKeyNotFound(key);
-        return nullptr; // Or handle the key-not-found case as needed
-    }
+    String getString(const String &key) const;
 
-    esp_err_t load(const String &key) {
-        if ((class_error = nvs_open("storage", NVS_READONLY, &my_handle)) != ESP_OK)
-            return class_error;
+    bool *getBool(const String &key) const;
 
-        class_error = ESP_ERR_NOT_FOUND;
+    esp_err_t load(const String &key);
 
-        for (const auto &param: _parameters) {
-            if (param->key == key) {
-                class_error = param->load(my_handle);
-                break; // Break after the parameter is found and loaded
-            }
-        }
-        nvs_close(my_handle);
-        if (class_error == ESP_ERR_NOT_FOUND)
-            loadKeyNotFound(key);
-        return class_error;
-    }
+    esp_err_t saveAll();
 
-    esp_err_t saveAll() {
-        if ((class_error = nvs_open("storage", NVS_READWRITE, &my_handle)) != ESP_OK)
-            return class_error;
+    esp_err_t loadAll();
 
-        for (const auto &param: _parameters) {
-            if ((class_error = param->save(my_handle)) != ESP_OK)
-                break;
-        }
-        nvs_close(my_handle);
-        return class_error;
-    }
+    esp_err_t loadAllStrict();
 
-    esp_err_t loadAll() {
-        if ((class_error = nvs_open("storage", NVS_READONLY, &my_handle)) != ESP_OK)
-            return class_error;
+    esp_err_t saveRaw(const String &key, uint8_t* value, int size);
 
-        for (const auto &param: _parameters) {
-            if ((class_error = param->load(my_handle)) != ESP_OK && class_error != ESP_ERR_NVS_NOT_FOUND)
-                break;
-        }
-        nvs_close(my_handle);
-        return class_error;
-    }
-
-    esp_err_t loadAllStrict() {
-        if ((class_error = nvs_open("storage", NVS_READONLY, &my_handle)) != ESP_OK)
-            return class_error;
-
-        for (const auto &param: _parameters) {
-            if ((class_error = param->load(my_handle)) != ESP_OK) {
-                if (class_error == ESP_ERR_NOT_FOUND)
-                    loadKeyNotFound(param->key);
-                break;
-            }
-        }
-        nvs_close(my_handle);
-        return class_error;
-    }
+    esp_err_t loadRaw(const String &key, uint8_t* value, int size);
 
 private:
     std::vector<std::unique_ptr<Parameter>> _parameters;
     esp_err_t class_error;
     nvs_handle my_handle;
-
-    void setKeyNotFound(const String &key) const {
-        ram_log_notify(RAM_LOG_ERROR_MEMORY, MEMORY_MODULE_ERROR_SET_NOT_FOUND, String("Parameter: '" + key + "'").c_str());
-    }
-
-    void loadKeyNotFound(const String &key) const {
-        ram_log_notify(RAM_LOG_ERROR_MEMORY, MEMORY_MODULE_ERROR_LOAD_NOT_FOUND, String("Parameter: '" + key + "'").c_str());
-    }
+    String storage_name;
 };
-
-void memory_module_init1();

@@ -25,18 +25,14 @@ typedef struct {
     String payload;
 } ram_log_item_t;
 
-/// \brief adds an entry to the ramlog
-///
-/// \param item_type what type of message
-/// \param module_error error code
-void ram_log_notify(RAM_LOG_ITEM_t item_type, uint32_t module_error);
 
 /// \brief adds an entry to the ramlog, an additional string can be added
 ///
 /// \param item_type what type of message
 /// \param module_error error code
 /// \param user_payload additional string
-void ram_log_notify(RAM_LOG_ITEM_t item_type, uint32_t module_error, const char *user_payload);
+/// \param flag_print default true. If false, message string will not be printed in console
+void ram_log_notify(RAM_LOG_ITEM_t item_type, uint32_t module_error, const char *user_payload = nullptr, bool flag_print = true);
 
 /// \brief adds an entry to the ramlog that can contain a sting
 ///
@@ -53,3 +49,9 @@ void ram_log_print_log();
 /// \param sys_ms current system time such as esp_timer_get_time()
 /// \return string of time format
 String ram_log_time_str(int64_t sys_ms);
+
+/// \brief converts a ramlog item type to a string
+///
+/// \param item ramlog item type
+/// \return string of item type
+String log_item_to_name(RAM_LOG_ITEM_t item);
