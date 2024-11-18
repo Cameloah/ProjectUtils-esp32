@@ -35,6 +35,7 @@ void project_utils_init(const String& ap_name = "New ESP-Device") {
         ram_log_notify(RAM_LOG_ERROR_NETWORK_MANAGER, retval);
 
     // init time module
+    delay(1000);
     time_module_init();
 
     // check for updates if configured
