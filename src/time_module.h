@@ -31,10 +31,10 @@ String time_formatted_pulled();
 
 /**
  * @brief Converts the given event milliseconds to a formatted string.
- * @param eventMillis The event milliseconds to convert.
+ * @param eventMicros The event milliseconds to convert.
  * @return The formatted string representing the converted time.
  */
-String time_convert_micros(unsigned long eventMillis);
+String time_convert_micros(unsigned long eventMicros);
 
 /**
  * @brief Checks if the time module is initialized.
