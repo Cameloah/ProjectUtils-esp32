@@ -17,6 +17,9 @@ typedef enum{
     TIME_MODULE_ERROR_UNKNOWN         = 0xFF
 } TIME_MODULEE_ERROR_t;
 
+
+extern NTP ntp;
+
 /**
  * @brief Initializes the time module.
  * @return The error code indicating the result of the initialization.

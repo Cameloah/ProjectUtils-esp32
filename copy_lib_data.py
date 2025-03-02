@@ -42,6 +42,7 @@ def merge_dependencies(source_ini, target_ini):
     source_lib_deps = [dep for dep in source_lib_deps if dep]
 
     # Merge dependencies into all environments in the target ini
+    # TODO: Handle if lib_deps is not present in target ini
     in_lib_deps = False
     updated_lines = []
     for line in target_lines:
