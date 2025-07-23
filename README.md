@@ -33,7 +33,9 @@ The [ESP32](https://www.espressif.com/en/products/socs/esp32) is a powerful micr
 
 This utility package is a **pre-configured project starter** built to accelerate ESP32 development by including essential modules commonly used across most of my projects.
 
----
+
+<br><br>
+
 
 ## ✨ Features
 
@@ -48,7 +50,7 @@ This utility package is a **pre-configured project starter** built to accelerate
 
 _Modular architecture: enable/disable features as needed!_
 
----
+<br><br>
 
 ## ⚙️ Integration Guide
 
@@ -64,7 +66,7 @@ Clone the repo as a submodule inside your project:
 
 See [PlatformIO docs](https://docs.platformio.org/en/latest/projectconf/sections/platformio/options/directory/lib_dir.html) for setup help.
 
----
+<br><br>
 
 ### 2️⃣ Modify `platformio.ini`
 
@@ -74,7 +76,7 @@ Add this line to enable automatic config & web data setup:
 extra_scripts = pre:lib/ProjectUtils-esp32/copy_lib_data.py
 ```
 
----
+<br><br>
 
 ### 3️⃣ Define control macros
 
@@ -95,7 +97,7 @@ In your `/include/main.h` file (create it if missing):
 #define DAYLIGHT_SAVING_SEC_OFFSET 3600       // DST offset (UTC+2 total)
 ```
 
----
+<br><br>
 
 ### 4️⃣ Add versioning (`version.h`)
 
@@ -113,7 +115,7 @@ In `/include/version.h`:
 
 Replace `your-user/your-repository` with your GitHub details.
 
----
+<br><br>
 
 ## 🚦 Quick Start
 
@@ -151,7 +153,7 @@ http://example-esp/webserial
 
 (DNS resolving may work via device name on modern routers)
 
----
+<br><br>
 
 ### Using the AsyncWebServer
 
@@ -165,7 +167,7 @@ void setup() {
 }
 ```
 
----
+<br><br>
 
 ## 📦 OTA GitHub Updates
 
@@ -180,7 +182,7 @@ On boot, the device checks for the **latest GitHub release**. If newer, it downl
 
 - Manual checks and downgrades are also supported
 
----
+<br><br>
 
 ## 💾 Memory Module (NVS)
 
@@ -209,7 +211,7 @@ Use `.save("key")` and `.loadAllStrict()` as needed. Typed getters available:
 getInt(), getFloat(), getDouble(), getString()
 ```
 
----
+<br><br>
 
 ## 🛠 Tools & Utilities
 
@@ -222,7 +224,7 @@ DualSerial.println("Hello World");
 
 Mirrors messages between USB and `/webserial`. Works as a direct `Serial` replacement.
 
----
+<br><br>
 
 ### RAM Log
 
@@ -240,7 +242,7 @@ ram_log_print_log();
 
 Timestamps switch to local time after sync.
 
----
+<br><br>
 
 ### Time Module
 
@@ -250,7 +252,7 @@ After successful sync with NTP server, the module:
 - Supports DST offset
 - Powers timestamping in logs
 
----
+<br><br>
 
 ## 📚 License
 
