@@ -1,259 +1,273 @@
-# Project Utilities for the ESP32 Microcontroller
+# Project Utilities for the ESP32
 
+[![CI](https://github.com/Cameloah/ProjectUtils-esp32/actions/workflows/ci.yml/badge.svg)](https://github.com/Cameloah/ProjectUtils-esp32/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![PlatformIO](https://img.shields.io/badge/built%20with-PlatformIO-orange)](https://platformio.org/)
-[![ESP32](https://img.shields.io/badge/target-ESP32-blue)](https://www.espressif.com/en/products/socs/esp32)
 
-A custom utility library to supercharge your ESP32 development with robust network management, OTA updates, memory handling, web-based serial, and more.
+A project starter library for ESP32 firmware (Arduino framework, PlatformIO). One `begin()` call
+gives a project:
 
-## 📑 Table of Contents
+- **WiFi setup** with a captive portal: an unconfigured device opens an access point and shows
+  its settings page
+- **Settings page** at `/settings` (device name, WiFi, static IP, updates), embedded in the
+  firmware, so no filesystem image is needed
+- **Persistent typed settings** stored in NVS (`pu::Settings`)
+- **Web console** at `/webserial` that mirrors serial output and input
+- **RAM log** of recent events with real timestamps, readable at `/api/pu/log`
+- **Time** via NTP with a configurable timezone
+- **Firmware upload** from PlatformIO (ArduinoOTA) and **updates from GitHub releases**
+- Optional **admin password** protecting all of the above
 
-- [Introduction](#introduction)
-- [Features](#-features)
-- [Integration Guide](#️-integration-guide)
-  - [1️⃣ Add the library](#1️⃣-add-the-library)
-  - [2️⃣ Modify `platformio.ini`](#2️⃣-modify-platformioini)
-  - [3️⃣ Define control macros](#3️⃣-define-control-macros)
-  - [4️⃣ Add versioning (`version.h`)](#4️⃣-add-versioning-versionh)
-- [🚦 Quick Start](#-quick-start)
-  - [Initialize WiFi + Tools](#initialize-wifi--tools)
-  - [Connect & Configure](#-connect--configure)
-  - [Using the AsyncWebServer](#using-the-asyncwebserver)
-- [OTA GitHub Updates](#-ota-github-updates)
-- [Memory Module (NVS)](#-memory-module-nvs)
-- [Tools & Utilities](#-tools--utilities)
-  - [DualSerial](#dualserial)
-  - [RAM Log](#ram-log)
-  - [Time Module](#time-module)
-- [License](#-license)
+> Version 2 is a redesign and not source-compatible with version 1.
+> See [Migrating from v1](#migrating-from-v1).
 
-## Introduction
+## Installation
 
-The [ESP32](https://www.espressif.com/en/products/socs/esp32) is a powerful microcontroller with configurable GPIOs, WiFi, BLE, SPI, I2C, and more — ideal for both small and large-scale projects that require real-time processing.
-
-This utility package is a **pre-configured project starter** built to accelerate ESP32 development by including essential modules commonly used across most of my projects.
-
-
-<br><br>
-
-
-## ✨ Features
-
--  **Network management** with captive portal and web-based WiFi configuration
--  **Async TCP server** to serve internal/external webpages
--  **WebSerial** interface that mirrors serial communication between web and USB
--  **Memory module** to safely store and retrieve parameters in the NVS
--  **RAM log module** to track runtime events
--  **Time sync module** with local time support for logs and events
--  **OTA support** via PlatformIO + GitHub releases
--  **Update routines** for firmware & SPIFFS from GitHub
-
-_Modular architecture: enable/disable features as needed!_
-
-<br><br>
-
-## ⚙️ Integration Guide
-
-> 💡 **Recommended:** Use [PlatformIO](https://platformio.org/platformio-ide) with VSCode or CLion for seamless integration.
-
-### 1️⃣ Add the library
-
-Clone the repo as a submodule inside your project:
-
-```
-/lib/ProjectUtils-esp32
-```
-
-See [PlatformIO docs](https://docs.platformio.org/en/latest/projectconf/sections/platformio/options/directory/lib_dir.html) for setup help.
-
-<br><br>
-
-### 2️⃣ Modify `platformio.ini`
-
-Add this line to enable automatic config & web data setup:
+Add the library to your project's `platformio.ini`. Its dependencies are installed automatically.
 
 ```ini
-extra_scripts = pre:lib/ProjectUtils-esp32/copy_lib_data.py
+[env:esp32dev]
+platform = espressif32
+board = esp32dev
+framework = arduino
+lib_deps = https://github.com/Cameloah/ProjectUtils-esp32.git#v2.0.0
+; TLS, web server and web console need more room than the default app partition offers
+board_build.partitions = min_spiffs.csv
 ```
 
-<br><br>
+Works with Arduino core 2.x (PlatformIO `espressif32`) and 3.x (pioarduino). A git submodule in
+`lib/` works as well.
 
-### 3️⃣ Define control macros
-
-In your `/include/main.h` file (create it if missing):
-
-```cpp
-// ---------- DEBUG AND SYSTEM CONTROL ---------- //
-#define SYS_CONTROL_STAT_IP                   // Enable static IP
-#define SYS_CONTROL_WEBSERIAL                 // Enable WebSerial (use 'DualSerial')
-
-#define AP_PASSWORD             nullptr       // Use nullptr to disable password
-#define AP_VERBOSITY            1             // 1: spawn if WiFi fails, 2: always spawn AP
-//#define AP_TIMEOUT            300000        // Optional: turn off AP after 5 min
-#define TIMEOUT_WIFI_CONNECT_MS 5000          // WiFi connect timeout
-
-// Time settings
-#define TIMEZONE_SEC_OFFSET     3600          // UTC+1
-#define DAYLIGHT_SAVING_SEC_OFFSET 3600       // DST offset (UTC+2 total)
-```
-
-<br><br>
-
-### 4️⃣ Add versioning (`version.h`)
-
-In `/include/version.h`:
+## Quick start
 
 ```cpp
-#define FW_VERSION_MAJOR        0
-#define FW_VERSION_MINOR        0
-#define FW_VERSION_PATCH        1
+#include <Arduino.h>
+#include <ProjectUtils.h>
 
-#define GITHUB_REPO             "your-user/your-repository"
-#define GITHUB_FW_BIN           "project_<version>.bin"
-#define GITHUB_FS_BIN           "spiffs.bin"
-```
-
-Replace `your-user/your-repository` with your GitHub details.
-
-<br><br>
-
-## 🚦 Quick Start
-
-### Initialize WiFi + Tools
-
-```cpp
-#include "main_project_utils.h"
+pu::Config config;
 
 void setup() {
-  DualSerial.println("Starting Wifi...");
-  project_utils_init("My new ESP32");
+    Serial.begin(115200);
+
+    config.deviceName = "My ESP32";
+    config.firmwareVersion = pu::Semver{0, 0, 1};
+    ProjectUtils.begin(config);
+
+    ProjectUtils.server().on("/", HTTP_GET, [](AsyncWebServerRequest* request) {
+        request->send(200, "text/plain", "Hello World");
+    });
 }
 
 void loop() {
-  project_utils_update();
+    ProjectUtils.loop();
 }
 ```
 
-- `project_utils_init()` sets up all modules
-- `project_utils_update()` must be called periodically
+First start:
 
-🔧 The ESP32 creates an AP with your device name + random suffix to avoid conflicts.
+1. The device opens an access point named after the device, e.g. `My ESP32 A1B2C3`.
+2. Connect to it; the settings page opens (or browse to `http://192.168.4.1/settings`).
+3. Enter the WiFi name and password and submit. The device restarts and joins the network.
+4. From then on it is reachable at `http://<devicename>.local/settings` (the name without
+   spaces, lowercase) or via its IP address, which is printed on the serial console.
 
-###  Connect & Configure
+A complete project is in [`examples/basic`](examples/basic).
 
-1. Connect to the ESP32 AP (e.g., `MyESP32-ABC123`)
-2. Captive portal opens → configure device name + WiFi
-3. Connect to the network → IP is printed over serial
-4. Open browser:
+## Configuration
 
-```
-http://example-esp/settings
-http://example-esp/webserial
-```
+Everything is set through `pu::Config` before calling `begin()`.
 
-(DNS resolving may work via device name on modern routers)
+| Field | Default | Meaning |
+|---|---|---|
+| `deviceName` | `"ESP32 Device"` | Default name; the user can change it on the settings page |
+| `firmwareVersion` | `{0, 0, 0}` | Version of your firmware, compared against GitHub releases |
+| `apMode` | `ApMode::OnFailure` | `OnFailure`: access point only if WiFi is unconfigured or unreachable. `Always`: keep it open |
+| `apPassword` | empty | Password of the setup access point (at least 8 characters). Empty = open |
+| `apTimeoutMs` | `0` | Close the access point after this time if nobody uses it. `0` = never |
+| `wifiConnectTimeoutMs` | `10000` | How long `begin()` waits for the WiFi connection |
+| `adminUser` / `adminPassword` | `"admin"` / empty | See [Security](#security) |
+| `timezone` | Central Europe | POSIX TZ string, e.g. `"EST5EDT,M3.2.0,M11.1.0"` |
+| `ntpServer` | `"pool.ntp.org"` | Time server |
+| `githubRepo` | empty | `"user/repository"`; enables updates from GitHub releases |
+| `githubFirmwareAsset` | `"firmware.bin"` | Release asset name; `<version>` is replaced by the tag |
+| `githubFilesystemAsset` | empty | Optional filesystem image asset of your project |
+| `enableWebSerial`, `enableOta` | `true` | Switch services off |
+| `serial` | `nullptr` | Stream used by the console; `nullptr` = `Serial` |
 
-<br><br>
+Building with `-D PU_DISABLE_WEBSERIAL` removes the web console from the firmware entirely.
 
-### Using the AsyncWebServer
+## Security
+
+Without `adminPassword`, anyone on the same network can change the WiFi settings, read the
+console and upload firmware. That is acceptable on a trusted home network and nowhere else; the
+device logs a warning at boot.
+
+With `config.adminPassword = "..."` the settings page, the JSON API, the web console and
+ArduinoOTA uploads all require it (user name `admin` unless changed). Protect your own routes
+the same way:
 
 ```cpp
-void handleRoot(AsyncWebServerRequest *request) {
-  request->send(200, "text/html", "Hello World");
+ProjectUtils.server().on("/secret", HTTP_GET, [](AsyncWebServerRequest* request) {
+    if (!ProjectUtils.web().authorize(request)) {
+        return;
+    }
+    request->send(200, "text/plain", "for your eyes only");
+});
+```
+
+The stored WiFi password is never sent to the browser or printed. Two limits to be aware of:
+the web interface is plain HTTP, and downloads from GitHub do not verify the server certificate.
+
+## Modules
+
+### Settings (NVS)
+
+```cpp
+pu::Settings appSettings;
+
+appSettings.begin("app", &ProjectUtils.log());   // NVS namespace, max. 15 characters
+appSettings.define("timeoutBoot", 20);           // key (max. 15 characters) and default
+appSettings.define("factor", 1.23f);
+appSettings.define("name", "test device");
+appSettings.define("autostart", true);
+appSettings.loadAll();                           // stored values replace the defaults
+
+int timeout = appSettings.getInt("timeoutBoot");
+String name = appSettings.getString("name");
+appSettings.set("autostart", false);             // saved to flash immediately
+appSettings.set("factor", 2.5f, false);          // RAM only; persist later with save("factor")
+```
+
+Types: `int`, `float`, `double`, `bool`, `String`, and raw bytes via `defineBlob` / `setBlob` /
+`getBlob`. Getters return the value, or the given fallback if the key is unknown or has another
+type (which is also logged). `ProjectUtils.settings()` holds the library's own settings.
+
+### Console
+
+`ProjectUtils.console()` is a `Stream` like `Serial`. Output goes to USB serial and to the web
+console at `/webserial`; input from both arrives in the same stream (a line typed in the web
+console ends with `\n`).
+
+```cpp
+Stream& console = ProjectUtils.console();
+console.println("Hello World");
+if (console.available()) {
+    String line = console.readStringUntil('\n');
 }
+```
 
-void setup() {
-  server.on("/", HTTP_GET, handleRoot);
+### Log
+
+Keeps the last 30 events in RAM and echoes them to the console.
+
+```cpp
+ProjectUtils.log().info("Startup complete, %d sensors", count);
+ProjectUtils.log().warn("Battery low");
+ProjectUtils.log().error("Sensor read failed: %d", code);
+ProjectUtils.log().printTo(ProjectUtils.console());
+```
+
+Timestamps are uptime until the clock is synchronised and local time afterwards, including for
+entries made before the sync. The log is also available at `http://<device>/api/pu/log`.
+
+### Time
+
+```cpp
+if (ProjectUtils.clock().isSynced()) {
+    String now = ProjectUtils.clock().now();   // "2026-01-31 12:34:56.789"
 }
 ```
 
-<br><br>
+The standard C functions `time()` and `localtime_r()` return correct local time as well.
 
-## 📦 OTA GitHub Updates
+### Firmware updates
 
-Once configured:
+**From PlatformIO:** set `upload_protocol = espota` and `upload_port = <devicename>.local`
+(plus `upload_flags = --auth=<adminPassword>` if a password is set).
 
-1. Update version numbers in `version.h`
-2. Create a public GitHub release with:
-   - `project_<version>.bin`
-   - `spiffs.bin` (includes all web files)
+**From GitHub releases:** set `config.githubRepo`, then for every release
 
-On boot, the device checks for the **latest GitHub release**. If newer, it downloads and installs both binaries.
+1. raise `config.firmwareVersion`,
+2. publish a public GitHub release tagged `vX.Y.Z` with the firmware binary attached under the
+   name given by `githubFirmwareAsset` (PlatformIO writes it to `.pio/build/<env>/firmware.bin`).
 
-- Manual checks and downgrades are also supported
+The settings page can check for and install the latest release, or install any specific version
+(downgrades included). With "Automatic Updates" enabled there, the device checks at every boot.
 
-<br><br>
+### HTTP API
 
-## 💾 Memory Module (NVS)
+Used by the settings page; requires the admin password if one is set.
 
-```cpp
-#include "memory_module.h"
+| Request | Purpose |
+|---|---|
+| `GET /api/pu/status` | Device, WiFi and update state as JSON |
+| `GET /api/pu/log` | RAM log as text |
+| `POST /api/pu/settings` | Form fields `deviceName`, `ssid`, `pass`, `ip`, `gateway`; restarts the device |
+| `POST /api/pu/autoupdates` | `enabled=true\|false` |
+| `POST /api/pu/update/check` | Start an update check; poll `status` for the result |
+| `POST /api/pu/update/install` | Install `version=vX.Y.Z`, or the latest if omitted |
+| `POST /api/pu/restart` | Restart the device |
 
-MemoryModule config_data;
+## Migrating from v1
 
-config_data.addParameter("timeout_boot", 20);
-config_data.addParameter("factor", 1.23f);
-config_data.addParameter("milage", 12345.3);
-config_data.addParameter("name", "test device");
-config_data.addParameter("flag_autostart", true);
+Devices keep their stored WiFi credentials, device name and auto-update choice when flashed
+with a v2-based firmware.
 
-config_data.set("flag_autostart", false);
+| v1 | v2 |
+|---|---|
+| `extra_scripts = pre:lib/ProjectUtils-esp32/copy_lib_data.py` | Remove the line. Dependencies come from the library manifest |
+| Library pages copied into your `data/` folder, `spiffs.bin` required | Remove `settings.html` and `style.css` from `data/`; the pages are part of the firmware. `/style.css` is still served for your own pages |
+| `include/main.h` macros, `include/version.h` | `pu::Config` fields (table below) |
+| `#include "main_project_utils.h"` | `#include <ProjectUtils.h>` |
+| `project_utils_init("name")` / `project_utils_update()` | `ProjectUtils.begin(config)` / `ProjectUtils.loop()` |
+| `server.on(...)` | `ProjectUtils.server().on(...)` |
+| `DualSerial.println(...)` | `ProjectUtils.console().println(...)`; call `Serial.begin()` yourself |
+| `MemoryModule m("ns"); m.addParameter(k, v);` | `pu::Settings s; s.begin("ns"); s.define(k, v);` |
+| `*m.getInt(k)`, `*m.getBool(k)` (pointers) | `s.getInt(k)`, `s.getBool(k)` (values) |
+| `m.set(k, v)` kept the value in RAM only | `s.set(k, v)` saves immediately; pass `false` as third argument for RAM only |
+| `m.loadAllStrict()` | `s.loadAll()`; missing keys keep their defaults |
+| `ram_log_notify(RAM_LOG_INFO, "text", true)` | `ProjectUtils.log().info("text")` |
+| `ram_log_notify(RAM_LOG_ERROR_..., code)` | `ProjectUtils.log().error("what failed: %d", code)` |
+| `ram_log_print_log()` | `ProjectUtils.log().printTo(ProjectUtils.console())` |
+| `network_manager_is_connected()` | `ProjectUtils.wifi().isConnected()` |
+| `ntp` object (`sstaub/NTP`) | `ProjectUtils.clock()` or the C time functions |
 
-int timeout = *config_data.getInt("timeout_boot");
-Serial.println(config_data.getString("name"));
+| v1 macro | v2 `Config` field |
+|---|---|
+| `SYS_CONTROL_STAT_IP` | Removed. A static IP is used whenever one is entered on the settings page |
+| `SYS_CONTROL_WEBSERIAL` | `enableWebSerial` (on by default) |
+| `AP_PASSWORD` | `apPassword` |
+| `AP_VERBOSITY` 1 / 2 | `apMode = ApMode::OnFailure` / `ApMode::Always` |
+| `AP_TIMEOUT` | `apTimeoutMs` |
+| `TIMEOUT_WIFI_CONNECT_MS` | `wifiConnectTimeoutMs` |
+| `TIMEZONE_SEC_OFFSET`, `DAYLIGHT_SAVING_SEC_OFFSET` | `timezone` (POSIX TZ string) |
+| `FW_VERSION_MAJOR/MINOR/PATCH` | `firmwareVersion = pu::Semver{major, minor, patch}` |
+| `GITHUB_REPO` | `githubRepo` |
+| `GITHUB_FW_BIN` | `githubFirmwareAsset` |
+| `GITHUB_FS_BIN` | `githubFilesystemAsset` (only if your project ships its own filesystem image) |
 
-config_data.saveAll();
-config_data.loadAll();
+Other changes in behaviour are listed in the [changelog](CHANGELOG.md).
+
+## Development
+
+Coding conventions are enforced by tools rather than described here: formatting by
+`clang-format`, naming and bug-prone patterns by `clang-tidy` and `cppcheck`, Python by `ruff`.
+
+```sh
+uv tool install platformio          # or: pipx install platformio
+uv tool install pre-commit
+pre-commit install                  # format and lint on every commit
+
+pio test -e native                  # unit tests on the host
+pio run -d examples/basic           # build the example for both Arduino core versions
+pio check -e check --fail-on-defect=low
+python3 scripts/run_clang_tidy.py   # needs clang-tidy on the PATH
 ```
 
-Use `.save("key")` and `.loadAllStrict()` as needed. Typed getters available:
-```cpp
-getInt(), getFloat(), getDouble(), getString()
-```
+The web pages live in `web/`. After editing them, `scripts/embed_web_assets.py` regenerates
+`src/pu/web_assets.gen.h`; the pre-commit hook does this automatically. GitHub Actions runs all
+of the above on every push and pull request.
 
-<br><br>
+## License
 
-## 🛠 Tools & Utilities
-
-### DualSerial
-
-```cpp
-DualSerial.begin(115200);
-DualSerial.println("Hello World");
-```
-
-Mirrors messages between USB and `/webserial`. Works as a direct `Serial` replacement.
-
-<br><br>
-
-### RAM Log
-
-Logs runtime events (30 entries max, circular buffer):
-
-```cpp
-ram_log_notify(RAM_LOG_ERROR_MEMORY, example_error);
-ram_log_notify(RAM_LOG_INFO, "Startup complete!", true);
-```
-
-Print logs:
-```cpp
-ram_log_print_log();
-```
-
-Timestamps switch to local time after sync.
-
-<br><br>
-
-### Time Module
-
-After successful sync with NTP server, the module:
-
-- Persists local time for the session
-- Supports DST offset
-- Powers timestamping in logs
-
-<br><br>
-
-## 📚 License
-
-MIT License — use freely, modify, and contribute.
+MIT, see [LICENSE](LICENSE).
