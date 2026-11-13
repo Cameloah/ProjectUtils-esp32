@@ -10,21 +10,23 @@
 </head>
 <body>
 <h1>Console</h1>
+<p class="lede">Serial output of the device. Type to send a line.</p>
 <div class="content">
-  <div class="card" style="max-width: 900px">
-    <div class="terminal" id="output"></div>
-    <form class="row" id="sendForm">
+  <div class="term">
+    <div class="terminal" id="output" tabindex="0" aria-label="Console output"></div>
+    <form id="sendForm">
       <input type="text" id="command" placeholder="Type a command" autocomplete="off"
-             autocapitalize="off" spellcheck="false" style="flex: 1 1 12rem; width: auto">
-      <input type="submit" value="Send">
+             autocapitalize="off" spellcheck="false" aria-label="Command">
+      <button class="primary">Send</button>
     </form>
-    <div class="actions">
-      <label><input type="checkbox" id="timestamps" checked> Timestamps</label>
-      <label><input type="checkbox" id="follow" checked> Follow output</label>
-      <button class="secondary" id="clear">Clear</button>
-      <button class="secondary" id="download">Download</button>
-    </div>
-    <p class="muted" id="state">Connecting...</p>
+  </div>
+  <div class="toolbar">
+    <label><input type="checkbox" id="timestamps" checked> Timestamps</label>
+    <label><input type="checkbox" id="follow" checked> Follow output</label>
+    <span class="muted" id="state">Connecting...</span>
+    <span class="grow"></span>
+    <button id="download">Download</button>
+    <button id="clear">Clear</button>
   </div>
 </div>
 
@@ -39,7 +41,7 @@
   function addLine(text, className) {
     const time = new Date().toTimeString().substring(0, 8);
     const line = pu.el("div", { className: className || "" },
-      pu.el("span", { className: "time", hidden: !byId("timestamps").checked }, time + " "), text);
+      pu.el("span", { className: "time", hidden: !byId("timestamps").checked }, time + "  "), text);
     output.append(line);
     while (output.childElementCount > maxLines) {
       output.firstElementChild.remove();

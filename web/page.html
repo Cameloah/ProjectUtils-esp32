@@ -10,15 +10,13 @@
 </head>
 <body>
 <h1 id="title"></h1>
-<div class="content">
-  <div class="card" id="card"></div>
-</div>
+<div class="content" id="content"></div>
 
 <script>
   // Renders a page that the project declared in C++ (pu::Page). Layout and values come from
   // /api/pu/page; every control reports back through /api/pu/page/widget.
   const path = location.pathname;
-  const card = document.getElementById("card");
+  const content = document.getElementById("content");
   const updaters = []; // per widget: function(value) that shows a value coming from the device
   const fail = (error) => pu.toast(error.message, true);
 
@@ -38,15 +36,19 @@
     return pu.el("div", { className: "row" }, pu.el("span", { className: "label" }, widget.label), control);
   }
 
-  // Saves an input when it changes and flashes its border as feedback.
+  // Saves an input when it changes and shows "Saved" next to it as feedback.
   function bindInput(input, index, read) {
+    const mark = pu.el("span", { className: "mark" }, "Saved");
     input.addEventListener("change", () => {
       send(index, "set", read()).then(() => {
         input.classList.remove("invalid");
         input.classList.add("saved");
-        setTimeout(() => input.classList.remove("saved"), 1200);
+        mark.classList.add("show");
+        setTimeout(() => { input.classList.remove("saved"); mark.classList.remove("show"); }, 1400);
       }).catch((error) => { input.classList.add("invalid"); fail(error); });
     });
+    updaters[index] = (value) => { if (document.activeElement !== input) { input.value = value; } };
+    return mark;
   }
 
   function range(input, widget) {
@@ -57,41 +59,34 @@
     });
   }
 
+  // Builders return an element plus where it belongs: a tile, a row of the panel, or a
+  // button that shares one line with its neighbours.
   const builders = {
-    section(widget) {
-      return pu.el("h2", null, widget.label);
-    },
     number(widget, index) {
       const input = pu.el("input", { type: "number", step: "any" });
       range(input, widget);
-      bindInput(input, index, () => input.value);
-      updaters[index] = (value) => { if (document.activeElement !== input) { input.value = value; } };
-      return row(widget, input);
+      return ["row", row(widget, bindInput(input, index, () => input.value), input)];
     },
     text(widget, index) {
       const input = pu.el("input", { type: "text", maxLength: 200 });
-      bindInput(input, index, () => input.value);
-      updaters[index] = (value) => { if (document.activeElement !== input) { input.value = value; } };
-      return row(widget, input);
+      return ["row", row(widget, bindInput(input, index, () => input.value), input)];
     },
     select(widget, index) {
       const input = pu.el("select", null, ...widget.options.map((option) => pu.el("option", null, option)));
-      bindInput(input, index, () => input.value);
-      updaters[index] = (value) => { if (document.activeElement !== input) { input.value = value; } };
-      return row(widget, input);
+      return ["row", row(widget, bindInput(input, index, () => input.value), input)];
     },
     toggle(widget, index) {
-      const input = pu.el("input", { type: "checkbox" });
+      const input = pu.el("input", { type: "checkbox", ariaLabel: widget.label });
       input.addEventListener("change", () => {
         send(index, "set", input.checked).catch((error) => { input.checked = !input.checked; fail(error); });
       });
       updaters[index] = (value) => { input.checked = value; };
-      return row(widget, pu.el("label", { className: "switch" }, input, pu.el("span", { className: "slider" })));
+      return ["row", row(widget, pu.el("label", { className: "switch" }, input, pu.el("span")))];
     },
     slider(widget, index) {
-      const input = pu.el("input", { type: "range" });
+      const input = pu.el("input", { type: "range", ariaLabel: widget.label });
       range(input, widget);
-      const shown = pu.el("span", { className: "value" });
+      const shown = pu.el("span", { className: "value data" });
       let dragging = false;
       let lastSent = 0;
       input.addEventListener("input", () => {
@@ -109,12 +104,12 @@
       updaters[index] = (value) => {
         if (!dragging) { input.value = value; shown.textContent = input.value; }
       };
-      return row(widget, input, shown);
+      return ["row", row(widget, input, shown)];
     },
     button(widget, index) {
-      const button = pu.el("button", { className: widget.color || "" }, widget.label);
+      const button = pu.el("button", { className: "wide " + (widget.color || "primary") }, widget.label);
       button.addEventListener("click", () => send(index, "click").catch(fail));
-      return pu.el("div", { className: "actions" }, button);
+      return ["action", button];
     },
     hold(widget, index) {
       const button = pu.el("button", { className: "hold " + (widget.color || "") }, "Hold");
@@ -137,20 +132,73 @@
       ["pointerup", "pointerleave", "pointercancel"].forEach((name) => button.addEventListener(name, release));
       button.addEventListener("contextmenu", (event) => event.preventDefault());
       window.addEventListener("blur", release);
-      updaters[index] = (value) => button.classList.toggle("active", value === true);
-      return row(widget, button);
+      updaters[index] = (value) => {
+        button.classList.toggle("active", value === true);
+        button.textContent = value === true ? "Running" : "Hold";
+      };
+      return ["row", row(widget, button)];
     },
     value(widget, index) {
       const shown = pu.el("span", { className: "value" });
+      const strong = pu.el("strong", null, shown);
+      if (widget.unit) {
+        strong.append(pu.el("i", null, widget.unit));
+      }
       updaters[index] = (value) => { shown.textContent = value; };
-      return row(widget, shown);
+      return ["tile", pu.el("div", { className: "tile" }, pu.el("span", { className: "label" }, widget.label), strong)];
     },
     indicator(widget, index) {
-      const dot = pu.el("span", { className: "dot" });
-      updaters[index] = (value) => { dot.className = "dot " + (value ? "on " + (widget.color || "") : ""); };
-      return row(widget, dot);
+      const lamp = pu.el("div", { className: "lamp" }, "Off");
+      updaters[index] = (value) => {
+        lamp.className = "lamp " + (value ? "on " + (widget.color || "") : "");
+        lamp.textContent = value ? "On" : "Off";
+      };
+      return ["tile", pu.el("div", { className: "tile" }, pu.el("span", { className: "label" }, widget.label), lamp)];
     },
   };
+
+  function render(page) {
+    let group = null;     // current section
+    let container = null; // tiles grid or panel that the next widget joins
+    let kind = "";
+    const startGroup = (title) => {
+      group = pu.el("div", { className: "group" });
+      if (title) {
+        group.append(pu.el("p", { className: "eyebrow" }, title));
+      }
+      content.append(group);
+      container = null;
+      kind = "";
+    };
+    page.widgets.forEach((widget, index) => {
+      if (widget.kind === "section") {
+        startGroup(widget.label);
+        return;
+      }
+      const build = builders[widget.kind];
+      if (!build) {
+        return;
+      }
+      if (group === null) {
+        startGroup("");
+      }
+      const [place, element] = build(widget, index);
+      const wanted = place === "tile" ? "tiles" : "panel";
+      if (kind !== wanted) {
+        container = pu.el("div", { className: wanted });
+        group.append(container);
+        kind = wanted;
+      }
+      if (place === "action") {
+        if (!container.lastChild || !container.lastChild.classList.contains("actions")) {
+          container.append(pu.el("div", { className: "actions" }));
+        }
+        container.lastChild.append(element);
+      } else {
+        container.append(element);
+      }
+    });
+  }
 
   function showValues(values) {
     values.forEach((value, index) => {
@@ -163,12 +211,7 @@
   pu.get("/api/pu/page?path=" + encodeURIComponent(path)).then((page) => {
     document.title = page.title;
     document.getElementById("title").textContent = page.title;
-    page.widgets.forEach((widget, index) => {
-      const build = builders[widget.kind];
-      if (build) {
-        card.append(build(widget, index));
-      }
-    });
+    render(page);
     showValues(page.values);
     setInterval(() => {
       pu.get("/api/pu/page/values?path=" + encodeURIComponent(path))

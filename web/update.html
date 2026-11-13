@@ -10,43 +10,50 @@
 </head>
 <body>
 <h1>Update</h1>
+<p class="lede" id="firmwareInfo">&nbsp;</p>
 <div class="content">
-  <div class="card">
-    <p id="firmwareInfo" class="muted"></p>
-
-    <h2>Upload a file</h2>
-    <div class="row">
-      <label for="file">File</label>
-      <div class="control"><input type="file" id="file" accept=".bin"></div>
-    </div>
-    <div class="row">
-      <label for="kind">Contents</label>
-      <div class="control">
-        <select id="kind">
-          <option value="firmware">Firmware</option>
-          <option value="filesystem">Filesystem image</option>
-        </select>
+  <div class="group">
+    <p class="eyebrow">Upload a file</p>
+    <div class="panel">
+      <label class="drop" id="drop" for="file">
+        <b id="dropTitle">Choose a firmware file</b>
+        <span id="dropHint">firmware.bin from .pio/build, or drop it here</span>
+        <input type="file" id="file" accept=".bin">
+      </label>
+      <div class="row">
+        <label class="label" for="kind">Contents</label>
+        <div class="control">
+          <select id="kind">
+            <option value="firmware">Firmware</option>
+            <option value="filesystem">Filesystem image</option>
+          </select>
+        </div>
+      </div>
+      <div class="actions"><button class="primary" id="upload">Upload and install</button></div>
+      <div class="phase">
+        <div class="meter" id="progress" hidden><i id="progressBar"></i></div>
+        <span id="uploadMessage"></span>
       </div>
     </div>
-    <div class="actions"><button id="upload">Upload and install</button></div>
-    <progress id="progress" value="0" max="100" hidden></progress>
-    <p id="uploadMessage" class="muted"></p>
   </div>
 
-  <div class="card" id="githubCard" hidden>
-    <h2>Online updates</h2>
-    <div class="row">
-      <label for="autoUpdates">Install updates automatically at start</label>
-      <div class="control">
-        <label class="switch"><input type="checkbox" id="autoUpdates"><span class="slider"></span></label>
+  <div class="group" id="githubCard" hidden>
+    <p class="eyebrow">Online updates</p>
+    <div class="panel">
+      <div class="row">
+        <span class="label">Latest release<small id="releaseNote">Not checked yet</small></span>
+        <div class="control"><button id="checkForUpdates">Check now</button></div>
       </div>
-    </div>
-    <div class="actions"><button id="checkForUpdates">Check for updates</button></div>
-    <div class="row">
-      <label for="specificFW">Install a specific version</label>
-      <div class="control">
-        <input type="text" id="specificFW" placeholder="v1.2.3" style="width: 7rem">
-        <button class="secondary" id="installSpecific">Install</button>
+      <div class="row">
+        <span class="label">Install updates automatically<small>Checked each time the device starts</small></span>
+        <label class="switch"><input type="checkbox" id="autoUpdates" aria-label="Install updates automatically"><span></span></label>
+      </div>
+      <div class="row">
+        <label class="label" for="specificFW">Install a specific version</label>
+        <div class="control">
+          <input type="text" class="data" id="specificFW" placeholder="v1.2.3" style="width: 7rem">
+          <button id="installSpecific">Install</button>
+        </div>
       </div>
     </div>
   </div>
@@ -57,6 +64,30 @@
   const fail = (error) => pu.toast(error.message, true);
 
   // ---- file upload ----
+  function showFile() {
+    const file = byId("file").files[0];
+    if (file) {
+      byId("dropTitle").textContent = file.name;
+      byId("dropHint").textContent = Math.round(file.size / 1024) + " KB";
+    }
+  }
+  byId("file").addEventListener("change", showFile);
+  const drop = byId("drop");
+  ["dragenter", "dragover"].forEach((name) => drop.addEventListener(name, (event) => {
+    event.preventDefault();
+    drop.classList.add("over");
+  }));
+  ["dragleave", "drop"].forEach((name) => drop.addEventListener(name, (event) => {
+    event.preventDefault();
+    drop.classList.remove("over");
+  }));
+  drop.addEventListener("drop", (event) => {
+    if (event.dataTransfer.files.length > 0) {
+      byId("file").files = event.dataTransfer.files;
+      showFile();
+    }
+  });
+
   byId("upload").addEventListener("click", () => {
     const file = byId("file").files[0];
     const message = byId("uploadMessage");
@@ -65,7 +96,7 @@
       return;
     }
     const button = byId("upload");
-    const progress = byId("progress");
+    const bar = byId("progressBar");
     const form = new FormData();
     form.append("file", file, file.name);
 
@@ -73,8 +104,9 @@
     xhr.open("POST", "/api/pu/update/upload?type=" + byId("kind").value + "&size=" + file.size);
     xhr.upload.onprogress = (event) => {
       if (event.lengthComputable) {
-        progress.value = Math.round(100 * event.loaded / event.total);
-        message.textContent = "Uploading: " + progress.value + " %";
+        const percent = Math.round(100 * event.loaded / event.total);
+        bar.style.width = percent + "%";
+        message.textContent = "Uploading " + percent + " %";
       }
     };
     const done = (text) => { button.disabled = false; message.textContent = text; };
@@ -90,8 +122,8 @@
       }
     };
     button.disabled = true;
-    progress.hidden = false;
-    progress.value = 0;
+    byId("progress").hidden = false;
+    bar.style.width = "0";
     xhr.send(form);
   });
 
@@ -106,22 +138,34 @@
     updateButton.textContent = text;
   }
 
+  function note(text, tag) {
+    byId("releaseNote").replaceChildren(tag ? pu.el("span", { className: "tag " + tag }, text) : text);
+  }
+
   function showUpdate(update) {
     latestVersion = update.latest;
     updateAvailable = update.state === "available";
     const busy = update.state === "checking" || update.state === "installing";
-    const labels = {
-      checking: ["Checking...", ""],
-      installing: ["Installing...", "orange"],
-      installed: ["Installed, restarting...", "green"],
-      available: [update.latest + " - install now", "orange"],
-      upToDate: ["Already on the latest version", "green"],
-      failed: ["Error: " + update.message, "red"],
-    };
-    const label = labels[update.state] || ["Check for updates", ""];
-    setButton(label[0], label[1]);
-    if (update.state === "installed") {
+    updateButton.disabled = busy;
+    if (update.state === "checking") {
+      setButton("Checking...");
+    } else if (update.state === "installing") {
+      setButton("Installing...");
+    } else if (update.state === "installed") {
+      setButton("Installed");
+      note("Installed, restarting", "good");
       pu.waitForRestart();
+    } else if (update.state === "available") {
+      setButton("Install " + update.latest, "primary");
+      note(update.latest + " available", "warn");
+    } else if (update.state === "upToDate") {
+      setButton("Check now");
+      note("Up to date", "good");
+    } else if (update.state === "failed") {
+      setButton("Check now");
+      note("Error: " + update.message);
+    } else {
+      setButton("Check now");
     }
     if (!busy && pollTimer !== null) {
       clearInterval(pollTimer);
@@ -151,25 +195,28 @@
   byId("autoUpdates").addEventListener("change", (event) => {
     const box = event.target;
     pu.post("/api/pu/autoupdates", { enabled: box.checked })
+      .then(() => pu.toast("Saved"))
       .catch((error) => { box.checked = !box.checked; fail(error); });
   });
 
   updateButton.addEventListener("click", () => {
     if (updateAvailable) {
-      setButton("Installing " + latestVersion + "...", "orange");
+      setButton("Installing " + latestVersion + "...");
       pu.post("/api/pu/update/install").then(pollUpdate).catch(fail);
     } else {
-      setButton("Checking...", "");
+      setButton("Checking...");
       pu.post("/api/pu/update/check").then(pollUpdate).catch(fail);
     }
   });
 
   byId("installSpecific").addEventListener("click", () => {
     const version = byId("specificFW").value.trim();
-    if (version !== "") {
-      setButton("Installing " + version + "...", "orange");
-      pu.post("/api/pu/update/install", { version: version }).then(pollUpdate).catch(fail);
+    if (version === "") {
+      pu.toast("Enter a version first", true);
+      return;
     }
+    setButton("Installing " + version + "...");
+    pu.post("/api/pu/update/install", { version: version }).then(pollUpdate).catch(fail);
   });
 </script>
 </body>

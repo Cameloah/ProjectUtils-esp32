@@ -10,49 +10,58 @@
 </head>
 <body>
 <h1>Settings</h1>
-<div class="content">
-  <form class="card" id="settingsForm">
-    <h2>General</h2>
-    <div class="row">
-      <label for="deviceName">Device name</label>
-      <div class="control"><input type="text" id="deviceName" name="deviceName" maxlength="32"></div>
-    </div>
-
-    <h2>WiFi</h2>
-    <div class="row">
-      <label for="ssid">Network name</label>
-      <div class="control"><input type="text" id="ssid" name="ssid" maxlength="32" autocapitalize="off"></div>
-    </div>
-    <div class="actions">
-      <button type="button" class="secondary" id="scan">Search for networks</button>
-    </div>
-    <ul class="list" id="networks"></ul>
-    <div class="row">
-      <label for="pass">Password</label>
-      <div class="control"><input type="password" id="pass" name="pass" maxlength="64" autocomplete="off"></div>
-    </div>
-    <div class="row">
-      <label for="clearPass">Open network (no password)</label>
-      <div class="control">
-        <label class="switch"><input type="checkbox" id="clearPass"><span class="slider"></span></label>
+<p class="lede">Name and network of this device.</p>
+<form class="content" id="settingsForm">
+  <div class="group">
+    <p class="eyebrow">General</p>
+    <div class="panel">
+      <div class="row">
+        <label class="label" for="deviceName">Device name</label>
+        <div class="control"><input type="text" id="deviceName" name="deviceName" maxlength="32"></div>
       </div>
     </div>
-    <div class="row">
-      <label for="ip">IP address</label>
-      <div class="control"><input type="text" id="ip" name="ip" placeholder="automatic (DHCP)"></div>
-    </div>
-    <div class="row">
-      <label for="gateway">Gateway</label>
-      <div class="control"><input type="text" id="gateway" name="gateway"></div>
-    </div>
+  </div>
 
-    <div class="actions"><input type="submit" value="Save and restart"></div>
-    <p class="muted" id="formMessage"></p>
-  </form>
-</div>
+  <div class="group">
+    <p class="eyebrow">WiFi</p>
+    <div class="panel" id="networks" hidden></div>
+    <div class="panel">
+      <div class="row">
+        <label class="label" for="ssid">Network name</label>
+        <div class="control"><input type="text" id="ssid" name="ssid" maxlength="32" autocapitalize="off"></div>
+      </div>
+      <div class="row">
+        <label class="label" for="pass">Password</label>
+        <div class="control"><input type="password" id="pass" name="pass" maxlength="64" autocomplete="off"></div>
+      </div>
+      <div class="row">
+        <span class="label">Open network<small>The network needs no password</small></span>
+        <label class="switch"><input type="checkbox" id="clearPass" aria-label="Open network"><span></span></label>
+      </div>
+      <details>
+        <summary>Fixed IP address</summary>
+        <div class="row">
+          <label class="label" for="ip">IP address</label>
+          <div class="control"><input type="text" class="data" id="ip" name="ip" placeholder="automatic (DHCP)"></div>
+        </div>
+        <div class="row">
+          <label class="label" for="gateway">Gateway</label>
+          <div class="control"><input type="text" class="data" id="gateway" name="gateway"></div>
+        </div>
+      </details>
+    </div>
+  </div>
+
+  <div class="control">
+    <button type="submit" class="primary">Save and restart</button>
+    <button type="button" id="scan">Search for networks</button>
+  </div>
+  <p class="muted" id="formMessage"></p>
+</form>
 
 <script>
   const byId = (id) => document.getElementById(id);
+  let connectedTo = "";
 
   pu.get("/api/pu/status").then((status) => {
     byId("deviceName").value = status.deviceName;
@@ -60,6 +69,7 @@
     byId("pass").placeholder = status.wifi.passwordSet ? "unchanged" : "";
     byId("ip").value = status.wifi.localIP;
     byId("gateway").value = status.wifi.gateway;
+    connectedTo = status.wifi.connected ? status.wifi.ssid : "";
   }).catch((error) => pu.toast(error.message, true));
 
   byId("clearPass").addEventListener("change", (event) => {
@@ -67,25 +77,41 @@
   });
 
   // ---- network search ----
-  const bars = (rssi) => (rssi > -60 ? "strong" : rssi > -75 ? "medium" : "weak");
+  const level = (rssi) => (rssi > -55 ? 4 : rssi > -67 ? 3 : rssi > -78 ? 2 : 1);
 
   function showNetworks(networks) {
     const list = byId("networks");
+    list.hidden = false;
     list.replaceChildren();
     if (networks.length === 0) {
-      list.append(pu.el("li", null, "No networks found. Type the name above."));
+      list.append(pu.el("div", { className: "row" }, "No networks found. Type the name below."));
     }
     networks.forEach((network) => {
-      const detail = bars(network.rssi) + (network.secure ? ", locked" : ", open");
-      list.append(pu.el("li", {
+      const bars = pu.el("span", { className: "bars" }, pu.el("i"), pu.el("i"), pu.el("i"), pu.el("i"));
+      bars.dataset.level = level(network.rssi);
+      const detail = pu.el("span", { className: "control" });
+      if (network.ssid === connectedTo) {
+        detail.append(pu.el("span", { className: "tag good" }, "Connected"));
+      }
+      detail.append(network.secure ? pu.icon("lock") : pu.el("span", { className: "tag" }, "Open"), bars);
+      const entry = pu.el("button", {
+        type: "button",
+        className: "row net" + (network.ssid === byId("ssid").value ? " chosen" : ""),
         onclick: () => {
           byId("ssid").value = network.ssid;
           byId("clearPass").checked = !network.secure;
           byId("pass").disabled = !network.secure;
+          list.querySelectorAll(".net").forEach((other) => other.classList.toggle("chosen", other === entry));
           if (network.secure) { byId("pass").focus(); }
         },
-      }, pu.el("span", null, network.ssid), pu.el("span", { className: "muted" }, detail)));
+      }, pu.el("span", { className: "label" }, network.ssid), detail);
+      list.append(entry);
     });
+  }
+
+  function scanDone(button) {
+    button.disabled = false;
+    button.textContent = "Search for networks";
   }
 
   function pollScan(button, attempts) {
@@ -94,8 +120,7 @@
         setTimeout(() => pollScan(button, attempts - 1), 700);
         return;
       }
-      button.disabled = false;
-      button.textContent = "Search for networks";
+      scanDone(button);
       showNetworks(scan.networks);
     }).catch((error) => {
       // while searching the device may be slow to answer; keep trying for a while
@@ -103,8 +128,7 @@
         setTimeout(() => pollScan(button, attempts - 1), 1000);
         return;
       }
-      button.disabled = false;
-      button.textContent = "Search for networks";
+      scanDone(button);
       pu.toast(error.message, true);
     });
   }
@@ -114,7 +138,7 @@
     button.disabled = true;
     button.textContent = "Searching...";
     pu.post("/api/pu/wifi/scan").then(() => setTimeout(() => pollScan(button, 20), 1000))
-      .catch((error) => { button.disabled = false; pu.toast(error.message, true); });
+      .catch((error) => { scanDone(button); pu.toast(error.message, true); });
   });
 
   // ---- save ----

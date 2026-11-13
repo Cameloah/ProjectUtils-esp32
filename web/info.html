@@ -10,16 +10,21 @@
 </head>
 <body>
 <h1>Device info</h1>
+<p class="lede" id="summary">&nbsp;</p>
 <div class="content">
-  <div class="card">
-    <table class="info" id="info"></table>
-    <div class="actions"><button class="red" id="restart">Restart device</button></div>
+  <div class="tiles">
+    <div class="tile"><span class="label">Running for</span><strong id="uptime">-</strong></div>
+    <div class="tile"><span class="label">Free memory</span><strong><span id="heap">-</span><i>KB</i></strong>
+      <div class="meter" style="margin-top: 10px"><i id="heapBar"></i></div></div>
+    <div class="tile"><span class="label">WiFi signal</span><strong><span id="rssi">-</span><i>dBm</i></strong></div>
+    <div class="tile"><span class="label">Firmware uses</span><strong><span id="flash">-</span><i>% of its space</i></strong></div>
   </div>
-  <div class="card">
-    <h2>Log</h2>
-    <pre class="log" id="log"></pre>
-    <div class="actions"><button class="secondary" id="refreshLog">Refresh</button></div>
+  <div class="panel"><dl class="kv" id="info"></dl></div>
+  <div class="group">
+    <p class="eyebrow">Log</p>
+    <div class="panel"><pre class="log" id="log"></pre></div>
   </div>
+  <div class="control" id="restartBox"></div>
 </div>
 
 <script>
@@ -29,27 +34,31 @@
   function duration(seconds) {
     const days = Math.floor(seconds / 86400);
     const clock = new Date((seconds % 86400) * 1000).toISOString().substring(11, 19);
-    return (days > 0 ? days + " d " : "") + clock;
+    return (days > 0 ? days + "d " : "") + clock;
   }
 
   function showInfo(info) {
+    byId("summary").textContent = info.chip + " · firmware " + info.firmware;
+    byId("uptime").textContent = duration(info.uptimeSeconds);
+    byId("heap").textContent = Math.round(info.heapFree / 1024);
+    byId("heapBar").style.width = Math.round(100 * (1 - info.heapFree / info.heapSize)) + "%";
+    byId("rssi").textContent = info.connected ? info.rssi : "-";
+    byId("flash").textContent = Math.round(100 * info.sketchSize / (info.sketchSize + info.sketchFree));
     const rows = [
       ["Name", info.deviceName],
-      ["Firmware", info.firmware],
-      ["Address", info.ip + " (" + info.hostname + ".local)"],
-      ["WiFi", info.connected ? info.ssid + ", " + info.rssi + " dBm" : "not connected (" + info.mode + ")"],
+      ["Address", info.ip + " · " + info.hostname + ".local"],
+      ["Network", info.connected ? info.ssid : "not connected (" + info.mode + ")"],
       ["MAC address", info.mac],
       ["Time", info.time],
-      ["Running for", duration(info.uptimeSeconds)],
-      ["Last start reason", info.resetReason],
-      ["Free memory", kb(info.heapFree) + " of " + kb(info.heapSize) + " (lowest " + kb(info.heapMinFree) + ")"],
+      ["Last start", info.resetReason],
+      ["Memory", kb(info.heapFree) + " free of " + kb(info.heapSize) + ", lowest " + kb(info.heapMinFree)],
       ["Firmware size", kb(info.sketchSize) + " of " + kb(info.sketchSize + info.sketchFree)],
-      ["Chip", info.chip + " rev " + info.chipRevision + ", " + info.cores + " cores, " + info.cpuMHz + " MHz"],
-      ["Flash size", kb(info.flashSize)],
+      ["Chip", info.chip + " rev " + info.chipRevision + ", " + info.cores + " cores, " + info.cpuMHz + " MHz, " +
+        Math.round(info.flashSize / 1048576) + " MB flash"],
       ["SDK", info.sdk],
     ];
-    byId("info").replaceChildren(...rows.map(([name, value]) =>
-      pu.el("tr", null, pu.el("td", null, name), pu.el("td", null, String(value)))));
+    byId("info").replaceChildren(...rows.flatMap(([name, value]) =>
+      [pu.el("dt", null, name), pu.el("dd", null, String(value))]));
   }
 
   const loadInfo = () => pu.get("/api/pu/info").then(showInfo).catch(() => {});
@@ -57,17 +66,30 @@
     const log = byId("log");
     log.textContent = text;
     log.scrollTop = log.scrollHeight;
-  }).catch((error) => pu.toast(error.message, true));
+  }).catch(() => {});
 
   loadInfo();
   loadLog();
   setInterval(loadInfo, 5000);
-  byId("refreshLog").addEventListener("click", loadLog);
-  byId("restart").addEventListener("click", () => {
-    if (confirm("Restart the device now?")) {
-      pu.post("/api/pu/restart").then(pu.waitForRestart).catch((error) => pu.toast(error.message, true));
-    }
-  });
+  setInterval(loadLog, 5000);
+
+  // Restart asks for confirmation in place.
+  function restartIdle() {
+    byId("restartBox").replaceChildren(pu.el("button", {
+      className: "red", id: "restart",
+      onclick: () => byId("restartBox").replaceChildren(
+        pu.el("span", null, "Restart now?"),
+        pu.el("button", {
+          className: "red solid", id: "restartYes",
+          onclick: () => {
+            restartIdle();
+            pu.post("/api/pu/restart").then(pu.waitForRestart).catch((error) => pu.toast(error.message, true));
+          },
+        }, "Restart"),
+        pu.el("button", { onclick: restartIdle }, "Cancel")),
+    }, "Restart device"));
+  }
+  restartIdle();
 </script>
 </body>
 </html>

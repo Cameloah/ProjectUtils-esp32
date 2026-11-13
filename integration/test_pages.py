@@ -24,7 +24,7 @@ def test_shared_style_and_script_are_served_without_login(device):
     style = device.get("/pu/app.css", auth=False)
     assert style.status_code == 200
     assert style.headers["Content-Type"].startswith("text/css")
-    assert ".menu__box" in style.text
+    assert ".pu-rail" in style.text
 
     script = device.get("/pu/app.js", auth=False)
     assert script.status_code == 200

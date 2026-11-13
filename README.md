@@ -79,8 +79,9 @@ A complete project is in [`examples/basic`](examples/basic).
 
 ## Web pages
 
-Every page has the same menu (top left) and style. The menu lists your project's pages first,
-then the built-in ones:
+Every page has the same style and the same list of pages: a rail on the left on wide screens,
+a drawer behind the menu button on phones. Light and dark follow the browser. The list shows
+your project's pages first, then the built-in ones:
 
 | Page | Address | Contents |
 |---|---|---|
@@ -165,8 +166,10 @@ ProjectUtils.web().addPage("/led", "LED", kLedHtml);          // served and list
 ProjectUtils.server().on("/led/toggle", HTTP_POST, onToggle); // your own route
 ```
 
-`app.js` provides `pu.get(path)`, `pu.post(path, params)`, `pu.el(tag, props, ...children)` and
-`pu.toast(text, isError)`. Use `addMenuLink("Title", "/path")` to list a route you serve
+`app.js` provides `pu.get(path)`, `pu.post(path, params)`, `pu.el(tag, props, ...children)`,
+`pu.icon(name)` and `pu.toast(text, isError)`. `app.css` has the building blocks of the built-in
+pages: `.content` (the page column), `.group` with an `.eyebrow` heading, `.panel` with `.row`s,
+`.tiles` with `.tile`s, `.card`, and buttons (`primary`, `red`). Use `addMenuLink("Title", "/path")` to list a route you serve
 entirely yourself.
 
 ## Configuration

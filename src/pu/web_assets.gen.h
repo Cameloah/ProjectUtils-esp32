@@ -7,272 +7,227 @@
 namespace pu {
 
 // web/app.css
-static const char kWebAppCss[] PROGMEM = R"PUWEB(/* Shared style of all ProjectUtils pages. Served at /pu/app.css; usable by project pages too. */
+static const char kWebAppCss[] PROGMEM = R"PUWEB(/* Shared style of all ProjectUtils pages. Served at /pu/app.css; usable by project pages too.
+   Layout: a rail of pages on the left (a drawer on phones, drawn by app.js), one column of
+   grouped rows, live readings as tiles. System fonts only: the device works without internet. */
 :root {
-  --radius: 10px;
-  --bg: #f4f6f8;
-  --card: #ffffff;
-  --text: #1c1e21;
-  --muted: #667078;
-  --line: #d5dbe0;
-  --accent: #007bff;
-  --accent-hover: #1282a2;
-  --menu: #eceff1;
-  --menu-hover: #cfd8dc;
-  --green: #009b0d;
-  --orange: #e0a800;
-  --red: #ad0f0f;
-  --shadow: 0 .45rem 2.2rem rgba(90, 97, 105, .1), 0 .25rem .55rem rgba(90, 97, 105, .12);
+  --accent: #2457f5;
+  --on-accent: #ffffff;
+  --bg: #f2f4f7;
+  --surface: #ffffff;
+  --raised: #f7f8fa;
+  --ink: #141821;
+  --muted: #5d6877;
+  --line: #dfe4ea;
+  --good: #0e9f4f;
+  --warn: #c47a00;
+  --bad: #d2362f;
+  --term-bg: #0f131a;
+  --term-ink: #d5dce6;
+  --term-dim: #6d7a8b;
+  --font-ui: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-data: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  --radius: 14px;
+  --rail: 236px;
 }
-
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #15181b;
-    --card: #1f2428;
-    --text: #e6e9ec;
-    --muted: #9aa4ad;
-    --line: #3a4249;
-    --menu: #262c31;
-    --menu-hover: #343c43;
-    --shadow: 0 .25rem 1rem rgba(0, 0, 0, .5);
+    --accent: #7aa2ff;
+    --on-accent: #0b1020;
+    --bg: #0c0f14;
+    --surface: #151a21;
+    --raised: #1b212a;
+    --ink: #e9edf2;
+    --muted: #8e99a8;
+    --line: #252c37;
+    --good: #3ecf7c;
+    --warn: #f0b03f;
+    --bad: #ff6b63;
+    --term-bg: #080a0e;
+    color-scheme: dark;
   }
 }
 
 * { box-sizing: border-box; }
-
-html {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  font-size: 16px;
-}
-
 body {
   margin: 0;
+  padding: 28px 16px 56px calc(var(--rail) + 16px);
   background: var(--bg);
-  color: var(--text);
-  text-align: center;
+  color: var(--ink);
+  font: 15px/1.45 var(--font-ui);
+  -webkit-font-smoothing: antialiased;
 }
-
-h1 { font-size: 1.6rem; margin: 0; padding: 18px 60px; min-height: 70px; }
-h2 { font-size: 1.25rem; margin: 1.6rem 0 .6rem; }
-h2:first-child { margin-top: .4rem; }
-p { margin: .6rem 0; }
+button, input, select { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+[hidden] { display: none !important; }
 a { color: var(--accent); }
-hr { border: none; border-top: 1px solid var(--line); margin: 1.6rem 0; }
-.muted { color: var(--muted); font-size: .9rem; }
+.data { font-family: var(--font-data); font-variant-numeric: tabular-nums; }
+svg.icon { width: 20px; height: 20px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 
-/* ---------- burger menu ---------- */
-#menu__toggle { position: fixed; opacity: 0; pointer-events: none; }
-#menu__toggle:checked + .menu__btn > span { transform: rotate(45deg); }
-#menu__toggle:checked + .menu__btn > span::before { top: 0; transform: rotate(0deg); }
-#menu__toggle:checked + .menu__btn > span::after { top: 0; transform: rotate(90deg); }
-#menu__toggle:checked ~ .menu__box { left: 0; }
-#menu__toggle:checked ~ .menu__shade { display: block; }
-#menu__toggle:focus-visible + .menu__btn { outline: 2px solid var(--accent); outline-offset: 6px; }
-.menu__btn {
-  position: fixed;
-  top: 20px;
-  left: 20px;
-  width: 30px;
-  height: 30px;
-  cursor: pointer;
-  z-index: 3;
-}
-.menu__btn > span,
-.menu__btn > span::before,
-.menu__btn > span::after {
-  display: block;
-  position: absolute;
-  top: 13px;
-  width: 100%;
-  height: 3px;
-  background-color: var(--text);
-  border-radius: 2px;
-  transition-duration: .25s;
-}
-.menu__btn > span::before { content: ""; top: -8px; }
-.menu__btn > span::after { content: ""; top: 8px; }
-.menu__box {
-  position: fixed;
-  top: 0;
-  left: -320px;
-  width: 300px;
-  max-width: 85vw;
-  height: 100%;
-  margin: 0;
-  padding: 70px 0 20px;
-  list-style: none;
-  text-align: left;
-  background-color: var(--menu);
-  box-shadow: var(--shadow);
-  transition-duration: .25s;
-  overflow-y: auto;
-  z-index: 2;
-}
-.menu__shade { display: none; position: fixed; inset: 0; z-index: 1; }
-.menu__device { padding: 0 24px 12px; color: var(--muted); font-size: .9rem; }
-.menu__sep { border-top: 1px solid var(--line); margin: 8px 0; }
-.menu__item {
-  display: block;
-  padding: 12px 24px;
-  color: var(--text);
-  font-size: 1.15rem;
-  font-weight: bold;
-  text-decoration: none;
-}
-.menu__item:hover { background-color: var(--menu-hover); }
-.menu__item.active { border-left: 4px solid var(--accent); padding-left: 20px; }
+/* ---------- page column ---------- */
+body > h1, body > .lede, .content { max-width: 860px; margin-left: auto; margin-right: auto; }
+h1 { margin-top: 0; margin-bottom: 4px; font-size: 24px; letter-spacing: -.02em; }
+h2 { margin: 0 0 8px; font-size: 17px; }
+p { margin: 0 0 10px; }
+.lede { margin-top: 0; margin-bottom: 0; color: var(--muted); }
+.content { display: flex; flex-direction: column; gap: 22px; margin-top: 22px; }
+.muted { color: var(--muted); font-size: 12.5px; }
+.group { display: flex; flex-direction: column; gap: 8px; }
+.eyebrow { margin: 0 4px; font-size: 12px; font-weight: 650; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
 
-/* ---------- layout ---------- */
-.content { padding: 0 12px 40px; }
-.card {
-  max-width: 640px;
-  margin: 0 auto 1.5rem;
-  padding: 20px 24px;
-  background-color: var(--card);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow);
+/* ---------- rail and top bar (built by app.js) ---------- */
+.pu-rail {
+  position: fixed; inset: 0 auto 0 0; z-index: 20; width: var(--rail);
+  display: flex; flex-direction: column; gap: 4px; padding: 20px 12px 16px;
+  background: var(--surface); border-right: 1px solid var(--line); overflow-y: auto;
 }
-.row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px 16px;
-  padding: 10px 0;
-  text-align: left;
+.pu-device { padding: 4px 10px 16px; }
+.pu-device b { display: block; font-size: 16px; letter-spacing: -.01em; overflow-wrap: anywhere; }
+.pu-status { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12.5px; }
+.pu-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+.pu-dot.on { background: var(--good); box-shadow: 0 0 0 3px color-mix(in srgb, var(--good) 22%, transparent); }
+.pu-rail a {
+  display: flex; align-items: center; gap: 12px; padding: 9px 10px; border-radius: 10px;
+  color: var(--muted); text-decoration: none; font-weight: 550;
 }
-.row > label, .row > .label { font-size: 1.05rem; flex: 1 1 30%; }
-.row > .control { display: flex; align-items: center; gap: 8px; flex: 0 1 auto; max-width: 100%; }
-.actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; padding: 12px 0; }
+.pu-rail a:hover { background: var(--raised); color: var(--ink); }
+.pu-rail a[aria-current=page] { background: color-mix(in srgb, var(--accent) 13%, transparent); color: var(--accent); }
+.pu-rail hr { width: auto; border: 0; border-top: 1px solid var(--line); margin: 8px 10px; }
+.pu-bar, .pu-scrim { display: none; }
+
+@media (max-width: 860px) {
+  body { padding: 70px 16px 48px; }
+  .pu-bar {
+    display: flex; align-items: center; gap: 10px; position: fixed; inset: 0 0 auto 0; z-index: 5; height: 54px;
+    padding: 0 16px 0 8px; border-bottom: 1px solid var(--line);
+    background: color-mix(in srgb, var(--surface) 88%, transparent); backdrop-filter: blur(10px);
+  }
+  .pu-bar b { flex: 1; font-size: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pu-burger { width: 40px; height: 40px; display: grid; place-items: center; border: 0; background: none; border-radius: 10px; cursor: pointer; }
+  .pu-rail { width: min(var(--rail), 82vw); transform: translateX(-102%); transition: transform .22s ease; box-shadow: 0 10px 40px rgba(0, 0, 0, .25); }
+  body.pu-open .pu-rail { transform: none; }
+  body.pu-open .pu-scrim { display: block; position: fixed; inset: 0; z-index: 15; border: 0; background: rgba(8, 10, 14, .45); }
+}
+
+/* ---------- panels, rows, tiles ---------- */
+.panel, .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+.card { padding: 16px; }
+.row { display: flex; align-items: center; justify-content: space-between; gap: 10px 16px; flex-wrap: wrap; padding: 12px 16px; min-height: 56px; }
+.row + .row, .row + details, details + .row, .row + .actions, .actions + .row { border-top: 1px solid var(--line); }
+.row > .label { flex: 1 1 6rem; min-width: 0; }
+.row small { display: block; color: var(--muted); font-size: 12.5px; }
+.control { position: relative; display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 .unit { color: var(--muted); min-width: 1.2em; }
-.value { font-size: 1.15rem; font-weight: bold; color: var(--accent); }
+.mark { position: absolute; top: -11px; right: 2px; color: var(--good); font-size: 11px; line-height: 1; opacity: 0; transition: opacity .2s; pointer-events: none; }
+.mark.show { opacity: 1; }
+.actions { display: flex; flex-wrap: wrap; gap: 10px; padding: 14px 16px; }
+.phase { display: grid; gap: 8px; padding: 0 16px 14px; color: var(--muted); font-size: 12.5px; }
+details > summary { padding: 14px 16px; cursor: pointer; color: var(--muted); font-weight: 550; }
+details .row:first-of-type { border-top: 1px solid var(--line); }
+
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.tile { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; min-width: 0; }
+.tile > .label { display: block; color: var(--muted); font-size: 12.5px; }
+.tile strong { display: block; margin-top: 4px; font: 600 26px/1.15 var(--font-data); font-variant-numeric: tabular-nums; letter-spacing: -.02em; overflow-wrap: anywhere; }
+.tile strong i { font: 500 14px var(--font-ui); color: var(--muted); margin-left: 4px; }
+.lamp { display: inline-flex; align-items: center; gap: 8px; margin-top: 8px; font-weight: 600; color: var(--muted); }
+.lamp::before { content: ""; width: 10px; height: 10px; border-radius: 50%; background: var(--line); }
+.lamp.on { color: var(--good); }
+.lamp.on::before { background: currentColor; box-shadow: 0 0 0 4px color-mix(in srgb, currentColor 22%, transparent); }
+.lamp.on.orange { color: var(--warn); }
+.lamp.on.red { color: var(--bad); }
+.meter { height: 6px; border-radius: 6px; background: var(--line); overflow: hidden; }
+.meter i { display: block; height: 100%; width: 0; background: var(--accent); border-radius: 6px; transition: width .25s linear; }
 
 /* ---------- controls ---------- */
-input[type=text], input[type=password], input[type=number], select {
-  padding: 10px 14px;
-  font-size: 1rem;
-  color: var(--text);
-  background: var(--card);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  width: 12rem;
-  max-width: 100%;
+.field, input[type=text], input[type=password], input[type=number], select {
+  height: 38px; padding: 0 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--raised);
+  width: 11.5rem; max-width: 100%;
 }
-input[type=number] { width: 7rem; }
-input[type=file] { max-width: 12rem; }
-input[type=range] { width: 9rem; max-width: 100%; accent-color: var(--accent); }
-input.saved { border-color: var(--green); }
-input.invalid, select.invalid { border-color: var(--red); }
+input[type=number], .field.num { width: 5.5rem; text-align: right; font-family: var(--font-data); }
+input:hover, select:hover { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+input.saved { border-color: var(--good); }
+input.invalid, select.invalid { border-color: var(--bad); }
+input[type=range] { width: 10rem; max-width: 100%; height: auto; padding: 0; border: 0; background: none; accent-color: var(--accent); }
+input[type=file] { width: auto; height: auto; padding: 0; border: 0; background: none; max-width: 14rem; }
+input[type=checkbox] { accent-color: var(--accent); }
 
-button, input[type=submit], .button {
-  border: none;
-  color: #fefcfb;
-  background-color: var(--accent);
-  padding: 12px 18px;
-  font-size: 1rem;
-  border-radius: var(--radius);
-  cursor: pointer;
-  transition: background-color .3s;
-  touch-action: manipulation;
-  user-select: none;
-  -webkit-user-select: none;
+button, .btn, input[type=submit] {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 40px; padding: 0 16px;
+  border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink);
+  font-weight: 600; cursor: pointer; transition: background .15s, transform .05s;
+  touch-action: manipulation; user-select: none; -webkit-user-select: none;
 }
-button:hover, input[type=submit]:hover { background-color: var(--accent-hover); }
+button:hover, .btn:hover { background: var(--raised); }
+button:active { transform: translateY(1px); }
 button:disabled { opacity: .5; cursor: default; }
-button.secondary { background-color: #6c757d; }
-button.green { background-color: var(--green); }
-button.orange { background-color: var(--orange); }
-button.red { background-color: var(--red); }
-button.hold { min-width: 110px; box-shadow: inset 0 -3px 0 rgba(0, 0, 0, .25); }
-button.hold.active { box-shadow: inset 0 3px 6px rgba(0, 0, 0, .45); transform: translateY(2px); }
+button.primary, input[type=submit] { background: var(--accent); border-color: transparent; color: var(--on-accent); }
+button.primary:hover, input[type=submit]:hover { background: color-mix(in srgb, var(--accent) 88%, var(--ink)); }
+button.red { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 45%, var(--line)); }
+button.red:hover, button.red.solid { background: var(--bad); color: #fff; border-color: transparent; }
+button.green { background: var(--good); border-color: transparent; color: #fff; }
+button.orange { background: var(--warn); border-color: transparent; color: #fff; }
+button.wide { flex: 1 1 10rem; }
+button.hold { min-width: 7.5rem; }
+button.hold.active { background: var(--accent); color: var(--on-accent); border-color: transparent; box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 25%, transparent); }
 
-.switch { position: relative; display: inline-block; width: 60px; height: 34px; flex: none; }
-.switch input { opacity: 0; width: 0; height: 0; }
-.slider {
-  position: absolute;
-  inset: 0;
-  cursor: pointer;
-  background-color: #b5bcc2;
-  border-radius: 34px;
-  transition: .3s;
-}
-.slider::before {
-  position: absolute;
-  content: "";
-  height: 26px;
-  width: 26px;
-  left: 4px;
-  bottom: 4px;
-  background-color: white;
-  border-radius: 50%;
-  transition: .3s;
-}
-input:checked + .slider { background-color: var(--accent); }
-input:focus-visible + .slider { box-shadow: 0 0 0 2px var(--accent-hover); }
-input:checked + .slider::before { transform: translateX(26px); }
+.switch { position: relative; width: 46px; height: 28px; flex: none; }
+.switch input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; margin: 0; cursor: pointer; }
+.switch span { position: absolute; inset: 0; border-radius: 28px; background: var(--line); transition: background .2s; pointer-events: none; }
+.switch span::after { content: ""; position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, .3); transition: transform .2s; }
+.switch input:checked + span { background: var(--accent); }
+.switch input:checked + span::after { transform: translateX(18px); }
+.switch input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
 
-.dot { display: inline-block; width: 18px; height: 18px; border-radius: 50%; background: #b5bcc2; }
-.dot.on { background: var(--green); box-shadow: 0 0 8px var(--green); }
-.dot.on.orange { background: var(--orange); box-shadow: 0 0 8px var(--orange); }
-.dot.on.red { background: var(--red); box-shadow: 0 0 8px var(--red); }
+/* ---------- settings: network list ---------- */
+.bars { display: inline-flex; align-items: flex-end; gap: 2px; height: 14px; }
+.bars i { width: 3px; background: var(--line); border-radius: 1px; }
+.bars i:nth-child(1) { height: 5px; } .bars i:nth-child(2) { height: 8px; }
+.bars i:nth-child(3) { height: 11px; } .bars i:nth-child(4) { height: 14px; }
+.bars[data-level="1"] i:nth-child(-n+1), .bars[data-level="2"] i:nth-child(-n+2),
+.bars[data-level="3"] i:nth-child(-n+3), .bars[data-level="4"] i { background: var(--ink); }
+button.net { width: 100%; height: auto; border: 0; border-radius: 0; background: none; font-weight: 400; text-align: left; }
+button.net:hover { background: var(--raised); }
+button.net.chosen .label { color: var(--accent); font-weight: 600; }
+.tag { font-size: 12px; color: var(--muted); border: 1px solid var(--line); border-radius: 20px; padding: 2px 8px; }
+.tag.good { color: var(--good); border-color: color-mix(in srgb, var(--good) 40%, var(--line)); }
+.tag.warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 40%, var(--line)); }
 
-progress { width: 100%; height: 14px; accent-color: var(--accent); }
+/* ---------- update: file drop ---------- */
+.drop { display: grid; justify-items: center; gap: 6px; margin: 16px; padding: 28px 16px; border: 1.5px dashed var(--line); border-radius: 12px; color: var(--muted); text-align: center; cursor: pointer; }
+.drop:hover, .drop.over { border-color: var(--accent); color: var(--ink); }
+.drop input { position: absolute; width: 1px; height: 1px; opacity: 0; }
 
-/* ---------- tables, logs, console ---------- */
-table.info { width: 100%; border-collapse: collapse; text-align: left; }
-table.info td { padding: 7px 4px; border-bottom: 1px solid var(--line); vertical-align: top; }
-table.info td:first-child { color: var(--muted); width: 45%; }
-pre.log, .terminal {
-  margin: 0;
-  padding: 12px;
-  text-align: left;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: .85rem;
-  line-height: 1.35;
-  white-space: pre-wrap;
-  word-break: break-word;
-  color: #d8dee4;
-  background: #101418;
-  border-radius: var(--radius);
-  overflow-y: auto;
-}
-pre.log { max-height: 50vh; }
-.terminal { height: 55vh; }
-.terminal .time { color: #6f7b86; }
-.terminal .sent { color: #6cb6ff; }
-.list { list-style: none; margin: 0; padding: 0; text-align: left; }
-.list li {
-  display: flex;
-  justify-content: space-between;
-  padding: 10px 6px;
-  border-bottom: 1px solid var(--line);
-  cursor: pointer;
-}
-.list li:hover { background: var(--menu-hover); }
+/* ---------- console, log, key-value list ---------- */
+.term { background: var(--term-bg); color: var(--term-ink); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+.term .terminal { height: min(52vh, 420px); padding: 14px 16px; overflow-y: auto; font: 13px/1.5 var(--font-data); white-space: pre-wrap; word-break: break-word; }
+.term .time { color: var(--term-dim); }
+.term .sent { color: #8ab4ff; }
+.term form { display: flex; gap: 8px; padding: 10px; border-top: 1px solid #222a36; }
+.term input[type=text] { flex: 1; min-width: 0; width: auto; border-color: #222a36; background: #141a23; color: var(--term-ink); font-family: var(--font-data); }
+.toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px; color: var(--muted); }
+.toolbar label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.toolbar .grow { flex: 1; }
+pre.log { margin: 0; padding: 14px 16px; max-height: 50vh; overflow-y: auto; background: var(--term-bg); color: var(--term-ink); font: 12.5px/1.5 var(--font-data); white-space: pre-wrap; word-break: break-word; }
+dl.kv { display: grid; grid-template-columns: minmax(8rem, 38%) minmax(0, 1fr); margin: 0; }
+dl.kv > * { margin: 0; padding: 11px 16px; border-top: 1px solid var(--line); min-width: 0; overflow-wrap: anywhere; }
+dl.kv > :nth-child(-n+2) { border-top: 0; }
+dl.kv dt { color: var(--muted); }
 
 #pu-toast {
-  position: fixed;
-  left: 50%;
-  bottom: 20px;
-  transform: translateX(-50%);
-  max-width: 90vw;
-  padding: 10px 18px;
-  color: #fff;
-  background: #323a41;
-  border-radius: var(--radius);
-  box-shadow: var(--shadow);
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity .3s;
-  z-index: 5;
+  position: fixed; left: 50%; bottom: 20px; transform: translate(-50%, 20px); max-width: 90vw; padding: 10px 16px;
+  border-radius: 10px; background: var(--ink); color: var(--bg); font-weight: 550; opacity: 0; pointer-events: none;
+  transition: .2s; z-index: 30;
 }
-#pu-toast.show { opacity: 1; }
-#pu-toast.error { background: var(--red); }
+#pu-toast.show { opacity: 1; transform: translate(-50%, 0); }
+#pu-toast.error { background: var(--bad); color: #fff; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 )PUWEB";
 
 // web/app.js
 static const char kWebAppJs[] PROGMEM = R"PUWEB(// Shared script of all ProjectUtils pages. Served at /pu/app.js; usable by project pages too.
-// Draws the menu on every page and offers small helpers under the global `pu`.
+// Draws the page list (a rail on wide screens, a drawer behind the menu button on phones) on
+// every page and offers small helpers under the global `pu`.
 "use strict";
 
 const pu = (() => {
@@ -309,12 +264,30 @@ const pu = (() => {
     return node;
   }
 
+  const icons = {
+    home: '<path d="M4 11l8-7 8 7v8a1 1 0 0 1-1 1h-4v-6h-6v6H5a1 1 0 0 1-1-1z"/>',
+    page: '<path d="M7 3h7l4 4v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM14 3v4h4"/>',
+    wifi: '<path d="M3 9a14 14 0 0 1 18 0M6 12.5a9.5 9.5 0 0 1 12 0M9 16a5 5 0 0 1 6 0"/><circle cx="12" cy="19" r=".6"/>',
+    upload: '<path d="M12 16V4m0 0l-4.5 4.5M12 4l4.5 4.5M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/>',
+    terminal: '<rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M7 10l3 2.5L7 15M12.5 15H17"/>',
+    chip: '<rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9.5 3v3M14.5 3v3M9.5 18v3M14.5 18v3M3 9.5h3M3 14.5h3M18 9.5h3M18 14.5h3"/>',
+    menu: '<path d="M4 7h16M4 12h16M4 17h16"/>',
+    lock: '<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
+  };
+
+  // Line icon by name: home, page, wifi, upload, terminal, chip, menu, lock.
+  function icon(name) {
+    const holder = document.createElement("span");
+    holder.innerHTML = '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true">' + icons[name] + "</svg>";
+    return holder.firstChild;
+  }
+
   let toastTimer = null;
   // Short message at the bottom of the page.
   function toast(text, isError) {
     let box = document.getElementById("pu-toast");
     if (!box) {
-      box = el("div", { id: "pu-toast" });
+      box = el("div", { id: "pu-toast", role: "status" });
       document.body.append(box);
     }
     box.textContent = text;
@@ -338,36 +311,50 @@ const pu = (() => {
     { path: "/console", title: "Console" },
     { path: "/info", title: "Device info" },
   ];
+  const builtInIcons = { "/settings": "wifi", "/update": "upload", "/console": "terminal", "/info": "chip" };
 
-  function buildMenu(nav) {
+  let rail = null;
+  let online = null;
+
+  function fillRail(nav) {
     const here = location.pathname;
-    const item = (page) => el("li", null, el("a", {
-      className: "menu__item" + (page.path === here ? " active" : ""),
-      href: page.path,
-    }, page.title));
-    const box = el("ul", { className: "menu__box" });
-    if (nav && nav.deviceName) {
-      box.append(el("li", { className: "menu__device" }, nav.deviceName));
-    }
+    const link = (page, iconName) => {
+      const a = el("a", { href: page.path }, icon(iconName), page.title);
+      if (page.path === here) {
+        a.setAttribute("aria-current", "page");
+      }
+      return a;
+    };
+    online = el("i", { className: "pu-dot" + (nav ? " on" : "") });
+    const status = el("span", { className: "pu-status" }, online, location.host);
     const project = nav ? nav.project : [];
-    project.forEach((page) => box.append(item(page)));
-    if (project.length > 0) {
-      box.append(el("li", { className: "menu__sep" }));
-    }
-    (nav ? nav.device : builtIn).forEach((page) => box.append(item(page)));
-
-    const toggle = el("input", { id: "menu__toggle", type: "checkbox", ariaLabel: "Menu" });
-    const shade = el("div", { className: "menu__shade", onclick: () => { toggle.checked = false; } });
-    document.body.prepend(
-      toggle, el("label", { className: "menu__btn", htmlFor: "menu__toggle" }, el("span")),
-      box, shade);
+    rail.replaceChildren(
+      el("div", { className: "pu-device" }, el("b", null, nav ? nav.deviceName : "Device"), status),
+      ...project.map((page) => link(page, page.path === "/" ? "home" : "page")),
+      ...(project.length > 0 ? [el("hr")] : []),
+      ...(nav ? nav.device : builtIn).map((page) => link(page, builtInIcons[page.path] || "page")));
   }
 
   document.addEventListener("DOMContentLoaded", () => {
-    get("/api/pu/nav").then(buildMenu).catch(() => buildMenu(null));
+    const close = () => document.body.classList.remove("pu-open");
+    rail = el("nav", { className: "pu-rail", ariaLabel: "Pages" });
+    const burger = el("button", {
+      className: "pu-burger", ariaLabel: "Open menu",
+      onclick: () => document.body.classList.add("pu-open"),
+    }, icon("menu"));
+    const bar = el("header", { className: "pu-bar" }, burger, el("b", null, document.title));
+    new MutationObserver(() => { bar.lastChild.textContent = document.title; })
+      .observe(document.querySelector("title"), { childList: true });
+    document.body.prepend(bar, rail, el("button", { className: "pu-scrim", ariaLabel: "Close menu", onclick: close }));
+    fillRail(null);
+    get("/api/pu/nav").then(fillRail).catch(() => {});
+    // the dot in the rail shows whether the device still answers
+    setInterval(() => {
+      get("/api/pu/nav").then(() => online.classList.add("on")).catch(() => online.classList.remove("on"));
+    }, 10000);
   });
 
-  return { get, post, el, toast, waitForRestart };
+  return { get, post, el, icon, toast, waitForRestart };
 })();
 )PUWEB";
 
@@ -384,21 +371,23 @@ static const char kWebConsoleHtml[] PROGMEM = R"PUWEB(<!DOCTYPE html>
 </head>
 <body>
 <h1>Console</h1>
+<p class="lede">Serial output of the device. Type to send a line.</p>
 <div class="content">
-  <div class="card" style="max-width: 900px">
-    <div class="terminal" id="output"></div>
-    <form class="row" id="sendForm">
+  <div class="term">
+    <div class="terminal" id="output" tabindex="0" aria-label="Console output"></div>
+    <form id="sendForm">
       <input type="text" id="command" placeholder="Type a command" autocomplete="off"
-             autocapitalize="off" spellcheck="false" style="flex: 1 1 12rem; width: auto">
-      <input type="submit" value="Send">
+             autocapitalize="off" spellcheck="false" aria-label="Command">
+      <button class="primary">Send</button>
     </form>
-    <div class="actions">
-      <label><input type="checkbox" id="timestamps" checked> Timestamps</label>
-      <label><input type="checkbox" id="follow" checked> Follow output</label>
-      <button class="secondary" id="clear">Clear</button>
-      <button class="secondary" id="download">Download</button>
-    </div>
-    <p class="muted" id="state">Connecting...</p>
+  </div>
+  <div class="toolbar">
+    <label><input type="checkbox" id="timestamps" checked> Timestamps</label>
+    <label><input type="checkbox" id="follow" checked> Follow output</label>
+    <span class="muted" id="state">Connecting...</span>
+    <span class="grow"></span>
+    <button id="download">Download</button>
+    <button id="clear">Clear</button>
   </div>
 </div>
 
@@ -413,7 +402,7 @@ static const char kWebConsoleHtml[] PROGMEM = R"PUWEB(<!DOCTYPE html>
   function addLine(text, className) {
     const time = new Date().toTimeString().substring(0, 8);
     const line = pu.el("div", { className: className || "" },
-      pu.el("span", { className: "time", hidden: !byId("timestamps").checked }, time + " "), text);
+      pu.el("span", { className: "time", hidden: !byId("timestamps").checked }, time + "  "), text);
     output.append(line);
     while (output.childElementCount > maxLines) {
       output.firstElementChild.remove();
@@ -498,16 +487,21 @@ static const char kWebInfoHtml[] PROGMEM = R"PUWEB(<!DOCTYPE html>
 </head>
 <body>
 <h1>Device info</h1>
+<p class="lede" id="summary">&nbsp;</p>
 <div class="content">
-  <div class="card">
-    <table class="info" id="info"></table>
-    <div class="actions"><button class="red" id="restart">Restart device</button></div>
+  <div class="tiles">
+    <div class="tile"><span class="label">Running for</span><strong id="uptime">-</strong></div>
+    <div class="tile"><span class="label">Free memory</span><strong><span id="heap">-</span><i>KB</i></strong>
+      <div class="meter" style="margin-top: 10px"><i id="heapBar"></i></div></div>
+    <div class="tile"><span class="label">WiFi signal</span><strong><span id="rssi">-</span><i>dBm</i></strong></div>
+    <div class="tile"><span class="label">Firmware uses</span><strong><span id="flash">-</span><i>% of its space</i></strong></div>
   </div>
-  <div class="card">
-    <h2>Log</h2>
-    <pre class="log" id="log"></pre>
-    <div class="actions"><button class="secondary" id="refreshLog">Refresh</button></div>
+  <div class="panel"><dl class="kv" id="info"></dl></div>
+  <div class="group">
+    <p class="eyebrow">Log</p>
+    <div class="panel"><pre class="log" id="log"></pre></div>
   </div>
+  <div class="control" id="restartBox"></div>
 </div>
 
 <script>
@@ -517,27 +511,31 @@ static const char kWebInfoHtml[] PROGMEM = R"PUWEB(<!DOCTYPE html>
   function duration(seconds) {
     const days = Math.floor(seconds / 86400);
     const clock = new Date((seconds % 86400) * 1000).toISOString().substring(11, 19);
-    return (days > 0 ? days + " d " : "") + clock;
+    return (days > 0 ? days + "d " : "") + clock;
   }
 
   function showInfo(info) {
+    byId("summary").textContent = info.chip + " · firmware " + info.firmware;
+    byId("uptime").textContent = duration(info.uptimeSeconds);
+    byId("heap").textContent = Math.round(info.heapFree / 1024);
+    byId("heapBar").style.width = Math.round(100 * (1 - info.heapFree / info.heapSize)) + "%";
+    byId("rssi").textContent = info.connected ? info.rssi : "-";
+    byId("flash").textContent = Math.round(100 * info.sketchSize / (info.sketchSize + info.sketchFree));
     const rows = [
       ["Name", info.deviceName],
-      ["Firmware", info.firmware],
-      ["Address", info.ip + " (" + info.hostname + ".local)"],
-      ["WiFi", info.connected ? info.ssid + ", " + info.rssi + " dBm" : "not connected (" + info.mode + ")"],
+      ["Address", info.ip + " · " + info.hostname + ".local"],
+      ["Network", info.connected ? info.ssid : "not connected (" + info.mode + ")"],
       ["MAC address", info.mac],
       ["Time", info.time],
-      ["Running for", duration(info.uptimeSeconds)],
-      ["Last start reason", info.resetReason],
-      ["Free memory", kb(info.heapFree) + " of " + kb(info.heapSize) + " (lowest " + kb(info.heapMinFree) + ")"],
+      ["Last start", info.resetReason],
+      ["Memory", kb(info.heapFree) + " free of " + kb(info.heapSize) + ", lowest " + kb(info.heapMinFree)],
       ["Firmware size", kb(info.sketchSize) + " of " + kb(info.sketchSize + info.sketchFree)],
-      ["Chip", info.chip + " rev " + info.chipRevision + ", " + info.cores + " cores, " + info.cpuMHz + " MHz"],
-      ["Flash size", kb(info.flashSize)],
+      ["Chip", info.chip + " rev " + info.chipRevision + ", " + info.cores + " cores, " + info.cpuMHz + " MHz, " +
+        Math.round(info.flashSize / 1048576) + " MB flash"],
       ["SDK", info.sdk],
     ];
-    byId("info").replaceChildren(...rows.map(([name, value]) =>
-      pu.el("tr", null, pu.el("td", null, name), pu.el("td", null, String(value)))));
+    byId("info").replaceChildren(...rows.flatMap(([name, value]) =>
+      [pu.el("dt", null, name), pu.el("dd", null, String(value))]));
   }
 
   const loadInfo = () => pu.get("/api/pu/info").then(showInfo).catch(() => {});
@@ -545,17 +543,30 @@ static const char kWebInfoHtml[] PROGMEM = R"PUWEB(<!DOCTYPE html>
     const log = byId("log");
     log.textContent = text;
     log.scrollTop = log.scrollHeight;
-  }).catch((error) => pu.toast(error.message, true));
+  }).catch(() => {});
 
   loadInfo();
   loadLog();
   setInterval(loadInfo, 5000);
-  byId("refreshLog").addEventListener("click", loadLog);
-  byId("restart").addEventListener("click", () => {
-    if (confirm("Restart the device now?")) {
-      pu.post("/api/pu/restart").then(pu.waitForRestart).catch((error) => pu.toast(error.message, true));
-    }
-  });
+  setInterval(loadLog, 5000);
+
+  // Restart asks for confirmation in place.
+  function restartIdle() {
+    byId("restartBox").replaceChildren(pu.el("button", {
+      className: "red", id: "restart",
+      onclick: () => byId("restartBox").replaceChildren(
+        pu.el("span", null, "Restart now?"),
+        pu.el("button", {
+          className: "red solid", id: "restartYes",
+          onclick: () => {
+            restartIdle();
+            pu.post("/api/pu/restart").then(pu.waitForRestart).catch((error) => pu.toast(error.message, true));
+          },
+        }, "Restart"),
+        pu.el("button", { onclick: restartIdle }, "Cancel")),
+    }, "Restart device"));
+  }
+  restartIdle();
 </script>
 </body>
 </html>
@@ -574,15 +585,13 @@ static const char kWebPageHtml[] PROGMEM = R"PUWEB(<!DOCTYPE html>
 </head>
 <body>
 <h1 id="title"></h1>
-<div class="content">
-  <div class="card" id="card"></div>
-</div>
+<div class="content" id="content"></div>
 
 <script>
   // Renders a page that the project declared in C++ (pu::Page). Layout and values come from
   // /api/pu/page; every control reports back through /api/pu/page/widget.
   const path = location.pathname;
-  const card = document.getElementById("card");
+  const content = document.getElementById("content");
   const updaters = []; // per widget: function(value) that shows a value coming from the device
   const fail = (error) => pu.toast(error.message, true);
 
@@ -602,15 +611,19 @@ static const char kWebPageHtml[] PROGMEM = R"PUWEB(<!DOCTYPE html>
     return pu.el("div", { className: "row" }, pu.el("span", { className: "label" }, widget.label), control);
   }
 
-  // Saves an input when it changes and flashes its border as feedback.
+  // Saves an input when it changes and shows "Saved" next to it as feedback.
   function bindInput(input, index, read) {
+    const mark = pu.el("span", { className: "mark" }, "Saved");
     input.addEventListener("change", () => {
       send(index, "set", read()).then(() => {
         input.classList.remove("invalid");
         input.classList.add("saved");
-        setTimeout(() => input.classList.remove("saved"), 1200);
+        mark.classList.add("show");
+        setTimeout(() => { input.classList.remove("saved"); mark.classList.remove("show"); }, 1400);
       }).catch((error) => { input.classList.add("invalid"); fail(error); });
     });
+    updaters[index] = (value) => { if (document.activeElement !== input) { input.value = value; } };
+    return mark;
   }
 
   function range(input, widget) {
@@ -621,41 +634,34 @@ static const char kWebPageHtml[] PROGMEM = R"PUWEB(<!DOCTYPE html>
     });
   }
 
+  // Builders return an element plus where it belongs: a tile, a row of the panel, or a
+  // button that shares one line with its neighbours.
   const builders = {
-    section(widget) {
-      return pu.el("h2", null, widget.label);
-    },
     number(widget, index) {
       const input = pu.el("input", { type: "number", step: "any" });
       range(input, widget);
-      bindInput(input, index, () => input.value);
-      updaters[index] = (value) => { if (document.activeElement !== input) { input.value = value; } };
-      return row(widget, input);
+      return ["row", row(widget, bindInput(input, index, () => input.value), input)];
     },
     text(widget, index) {
       const input = pu.el("input", { type: "text", maxLength: 200 });
-      bindInput(input, index, () => input.value);
-      updaters[index] = (value) => { if (document.activeElement !== input) { input.value = value; } };
-      return row(widget, input);
+      return ["row", row(widget, bindInput(input, index, () => input.value), input)];
     },
     select(widget, index) {
       const input = pu.el("select", null, ...widget.options.map((option) => pu.el("option", null, option)));
-      bindInput(input, index, () => input.value);
-      updaters[index] = (value) => { if (document.activeElement !== input) { input.value = value; } };
-      return row(widget, input);
+      return ["row", row(widget, bindInput(input, index, () => input.value), input)];
     },
     toggle(widget, index) {
-      const input = pu.el("input", { type: "checkbox" });
+      const input = pu.el("input", { type: "checkbox", ariaLabel: widget.label });
       input.addEventListener("change", () => {
         send(index, "set", input.checked).catch((error) => { input.checked = !input.checked; fail(error); });
       });
       updaters[index] = (value) => { input.checked = value; };
-      return row(widget, pu.el("label", { className: "switch" }, input, pu.el("span", { className: "slider" })));
+      return ["row", row(widget, pu.el("label", { className: "switch" }, input, pu.el("span")))];
     },
     slider(widget, index) {
-      const input = pu.el("input", { type: "range" });
+      const input = pu.el("input", { type: "range", ariaLabel: widget.label });
       range(input, widget);
-      const shown = pu.el("span", { className: "value" });
+      const shown = pu.el("span", { className: "value data" });
       let dragging = false;
       let lastSent = 0;
       input.addEventListener("input", () => {
@@ -673,12 +679,12 @@ static const char kWebPageHtml[] PROGMEM = R"PUWEB(<!DOCTYPE html>
       updaters[index] = (value) => {
         if (!dragging) { input.value = value; shown.textContent = input.value; }
       };
-      return row(widget, input, shown);
+      return ["row", row(widget, input, shown)];
     },
     button(widget, index) {
-      const button = pu.el("button", { className: widget.color || "" }, widget.label);
+      const button = pu.el("button", { className: "wide " + (widget.color || "primary") }, widget.label);
       button.addEventListener("click", () => send(index, "click").catch(fail));
-      return pu.el("div", { className: "actions" }, button);
+      return ["action", button];
     },
     hold(widget, index) {
       const button = pu.el("button", { className: "hold " + (widget.color || "") }, "Hold");
@@ -701,20 +707,73 @@ static const char kWebPageHtml[] PROGMEM = R"PUWEB(<!DOCTYPE html>
       ["pointerup", "pointerleave", "pointercancel"].forEach((name) => button.addEventListener(name, release));
       button.addEventListener("contextmenu", (event) => event.preventDefault());
       window.addEventListener("blur", release);
-      updaters[index] = (value) => button.classList.toggle("active", value === true);
-      return row(widget, button);
+      updaters[index] = (value) => {
+        button.classList.toggle("active", value === true);
+        button.textContent = value === true ? "Running" : "Hold";
+      };
+      return ["row", row(widget, button)];
     },
     value(widget, index) {
       const shown = pu.el("span", { className: "value" });
+      const strong = pu.el("strong", null, shown);
+      if (widget.unit) {
+        strong.append(pu.el("i", null, widget.unit));
+      }
       updaters[index] = (value) => { shown.textContent = value; };
-      return row(widget, shown);
+      return ["tile", pu.el("div", { className: "tile" }, pu.el("span", { className: "label" }, widget.label), strong)];
     },
     indicator(widget, index) {
-      const dot = pu.el("span", { className: "dot" });
-      updaters[index] = (value) => { dot.className = "dot " + (value ? "on " + (widget.color || "") : ""); };
-      return row(widget, dot);
+      const lamp = pu.el("div", { className: "lamp" }, "Off");
+      updaters[index] = (value) => {
+        lamp.className = "lamp " + (value ? "on " + (widget.color || "") : "");
+        lamp.textContent = value ? "On" : "Off";
+      };
+      return ["tile", pu.el("div", { className: "tile" }, pu.el("span", { className: "label" }, widget.label), lamp)];
     },
   };
+
+  function render(page) {
+    let group = null;     // current section
+    let container = null; // tiles grid or panel that the next widget joins
+    let kind = "";
+    const startGroup = (title) => {
+      group = pu.el("div", { className: "group" });
+      if (title) {
+        group.append(pu.el("p", { className: "eyebrow" }, title));
+      }
+      content.append(group);
+      container = null;
+      kind = "";
+    };
+    page.widgets.forEach((widget, index) => {
+      if (widget.kind === "section") {
+        startGroup(widget.label);
+        return;
+      }
+      const build = builders[widget.kind];
+      if (!build) {
+        return;
+      }
+      if (group === null) {
+        startGroup("");
+      }
+      const [place, element] = build(widget, index);
+      const wanted = place === "tile" ? "tiles" : "panel";
+      if (kind !== wanted) {
+        container = pu.el("div", { className: wanted });
+        group.append(container);
+        kind = wanted;
+      }
+      if (place === "action") {
+        if (!container.lastChild || !container.lastChild.classList.contains("actions")) {
+          container.append(pu.el("div", { className: "actions" }));
+        }
+        container.lastChild.append(element);
+      } else {
+        container.append(element);
+      }
+    });
+  }
 
   function showValues(values) {
     values.forEach((value, index) => {
@@ -727,12 +786,7 @@ static const char kWebPageHtml[] PROGMEM = R"PUWEB(<!DOCTYPE html>
   pu.get("/api/pu/page?path=" + encodeURIComponent(path)).then((page) => {
     document.title = page.title;
     document.getElementById("title").textContent = page.title;
-    page.widgets.forEach((widget, index) => {
-      const build = builders[widget.kind];
-      if (build) {
-        card.append(build(widget, index));
-      }
-    });
+    render(page);
     showValues(page.values);
     setInterval(() => {
       pu.get("/api/pu/page/values?path=" + encodeURIComponent(path))
@@ -757,49 +811,58 @@ static const char kWebSettingsHtml[] PROGMEM = R"PUWEB(<!DOCTYPE html>
 </head>
 <body>
 <h1>Settings</h1>
-<div class="content">
-  <form class="card" id="settingsForm">
-    <h2>General</h2>
-    <div class="row">
-      <label for="deviceName">Device name</label>
-      <div class="control"><input type="text" id="deviceName" name="deviceName" maxlength="32"></div>
-    </div>
-
-    <h2>WiFi</h2>
-    <div class="row">
-      <label for="ssid">Network name</label>
-      <div class="control"><input type="text" id="ssid" name="ssid" maxlength="32" autocapitalize="off"></div>
-    </div>
-    <div class="actions">
-      <button type="button" class="secondary" id="scan">Search for networks</button>
-    </div>
-    <ul class="list" id="networks"></ul>
-    <div class="row">
-      <label for="pass">Password</label>
-      <div class="control"><input type="password" id="pass" name="pass" maxlength="64" autocomplete="off"></div>
-    </div>
-    <div class="row">
-      <label for="clearPass">Open network (no password)</label>
-      <div class="control">
-        <label class="switch"><input type="checkbox" id="clearPass"><span class="slider"></span></label>
+<p class="lede">Name and network of this device.</p>
+<form class="content" id="settingsForm">
+  <div class="group">
+    <p class="eyebrow">General</p>
+    <div class="panel">
+      <div class="row">
+        <label class="label" for="deviceName">Device name</label>
+        <div class="control"><input type="text" id="deviceName" name="deviceName" maxlength="32"></div>
       </div>
     </div>
-    <div class="row">
-      <label for="ip">IP address</label>
-      <div class="control"><input type="text" id="ip" name="ip" placeholder="automatic (DHCP)"></div>
-    </div>
-    <div class="row">
-      <label for="gateway">Gateway</label>
-      <div class="control"><input type="text" id="gateway" name="gateway"></div>
-    </div>
+  </div>
 
-    <div class="actions"><input type="submit" value="Save and restart"></div>
-    <p class="muted" id="formMessage"></p>
-  </form>
-</div>
+  <div class="group">
+    <p class="eyebrow">WiFi</p>
+    <div class="panel" id="networks" hidden></div>
+    <div class="panel">
+      <div class="row">
+        <label class="label" for="ssid">Network name</label>
+        <div class="control"><input type="text" id="ssid" name="ssid" maxlength="32" autocapitalize="off"></div>
+      </div>
+      <div class="row">
+        <label class="label" for="pass">Password</label>
+        <div class="control"><input type="password" id="pass" name="pass" maxlength="64" autocomplete="off"></div>
+      </div>
+      <div class="row">
+        <span class="label">Open network<small>The network needs no password</small></span>
+        <label class="switch"><input type="checkbox" id="clearPass" aria-label="Open network"><span></span></label>
+      </div>
+      <details>
+        <summary>Fixed IP address</summary>
+        <div class="row">
+          <label class="label" for="ip">IP address</label>
+          <div class="control"><input type="text" class="data" id="ip" name="ip" placeholder="automatic (DHCP)"></div>
+        </div>
+        <div class="row">
+          <label class="label" for="gateway">Gateway</label>
+          <div class="control"><input type="text" class="data" id="gateway" name="gateway"></div>
+        </div>
+      </details>
+    </div>
+  </div>
+
+  <div class="control">
+    <button type="submit" class="primary">Save and restart</button>
+    <button type="button" id="scan">Search for networks</button>
+  </div>
+  <p class="muted" id="formMessage"></p>
+</form>
 
 <script>
   const byId = (id) => document.getElementById(id);
+  let connectedTo = "";
 
   pu.get("/api/pu/status").then((status) => {
     byId("deviceName").value = status.deviceName;
@@ -807,6 +870,7 @@ static const char kWebSettingsHtml[] PROGMEM = R"PUWEB(<!DOCTYPE html>
     byId("pass").placeholder = status.wifi.passwordSet ? "unchanged" : "";
     byId("ip").value = status.wifi.localIP;
     byId("gateway").value = status.wifi.gateway;
+    connectedTo = status.wifi.connected ? status.wifi.ssid : "";
   }).catch((error) => pu.toast(error.message, true));
 
   byId("clearPass").addEventListener("change", (event) => {
@@ -814,25 +878,41 @@ static const char kWebSettingsHtml[] PROGMEM = R"PUWEB(<!DOCTYPE html>
   });
 
   // ---- network search ----
-  const bars = (rssi) => (rssi > -60 ? "strong" : rssi > -75 ? "medium" : "weak");
+  const level = (rssi) => (rssi > -55 ? 4 : rssi > -67 ? 3 : rssi > -78 ? 2 : 1);
 
   function showNetworks(networks) {
     const list = byId("networks");
+    list.hidden = false;
     list.replaceChildren();
     if (networks.length === 0) {
-      list.append(pu.el("li", null, "No networks found. Type the name above."));
+      list.append(pu.el("div", { className: "row" }, "No networks found. Type the name below."));
     }
     networks.forEach((network) => {
-      const detail = bars(network.rssi) + (network.secure ? ", locked" : ", open");
-      list.append(pu.el("li", {
+      const bars = pu.el("span", { className: "bars" }, pu.el("i"), pu.el("i"), pu.el("i"), pu.el("i"));
+      bars.dataset.level = level(network.rssi);
+      const detail = pu.el("span", { className: "control" });
+      if (network.ssid === connectedTo) {
+        detail.append(pu.el("span", { className: "tag good" }, "Connected"));
+      }
+      detail.append(network.secure ? pu.icon("lock") : pu.el("span", { className: "tag" }, "Open"), bars);
+      const entry = pu.el("button", {
+        type: "button",
+        className: "row net" + (network.ssid === byId("ssid").value ? " chosen" : ""),
         onclick: () => {
           byId("ssid").value = network.ssid;
           byId("clearPass").checked = !network.secure;
           byId("pass").disabled = !network.secure;
+          list.querySelectorAll(".net").forEach((other) => other.classList.toggle("chosen", other === entry));
           if (network.secure) { byId("pass").focus(); }
         },
-      }, pu.el("span", null, network.ssid), pu.el("span", { className: "muted" }, detail)));
+      }, pu.el("span", { className: "label" }, network.ssid), detail);
+      list.append(entry);
     });
+  }
+
+  function scanDone(button) {
+    button.disabled = false;
+    button.textContent = "Search for networks";
   }
 
   function pollScan(button, attempts) {
@@ -841,8 +921,7 @@ static const char kWebSettingsHtml[] PROGMEM = R"PUWEB(<!DOCTYPE html>
         setTimeout(() => pollScan(button, attempts - 1), 700);
         return;
       }
-      button.disabled = false;
-      button.textContent = "Search for networks";
+      scanDone(button);
       showNetworks(scan.networks);
     }).catch((error) => {
       // while searching the device may be slow to answer; keep trying for a while
@@ -850,8 +929,7 @@ static const char kWebSettingsHtml[] PROGMEM = R"PUWEB(<!DOCTYPE html>
         setTimeout(() => pollScan(button, attempts - 1), 1000);
         return;
       }
-      button.disabled = false;
-      button.textContent = "Search for networks";
+      scanDone(button);
       pu.toast(error.message, true);
     });
   }
@@ -861,7 +939,7 @@ static const char kWebSettingsHtml[] PROGMEM = R"PUWEB(<!DOCTYPE html>
     button.disabled = true;
     button.textContent = "Searching...";
     pu.post("/api/pu/wifi/scan").then(() => setTimeout(() => pollScan(button, 20), 1000))
-      .catch((error) => { button.disabled = false; pu.toast(error.message, true); });
+      .catch((error) => { scanDone(button); pu.toast(error.message, true); });
   });
 
   // ---- save ----
@@ -893,43 +971,50 @@ static const char kWebUpdateHtml[] PROGMEM = R"PUWEB(<!DOCTYPE html>
 </head>
 <body>
 <h1>Update</h1>
+<p class="lede" id="firmwareInfo">&nbsp;</p>
 <div class="content">
-  <div class="card">
-    <p id="firmwareInfo" class="muted"></p>
-
-    <h2>Upload a file</h2>
-    <div class="row">
-      <label for="file">File</label>
-      <div class="control"><input type="file" id="file" accept=".bin"></div>
-    </div>
-    <div class="row">
-      <label for="kind">Contents</label>
-      <div class="control">
-        <select id="kind">
-          <option value="firmware">Firmware</option>
-          <option value="filesystem">Filesystem image</option>
-        </select>
+  <div class="group">
+    <p class="eyebrow">Upload a file</p>
+    <div class="panel">
+      <label class="drop" id="drop" for="file">
+        <b id="dropTitle">Choose a firmware file</b>
+        <span id="dropHint">firmware.bin from .pio/build, or drop it here</span>
+        <input type="file" id="file" accept=".bin">
+      </label>
+      <div class="row">
+        <label class="label" for="kind">Contents</label>
+        <div class="control">
+          <select id="kind">
+            <option value="firmware">Firmware</option>
+            <option value="filesystem">Filesystem image</option>
+          </select>
+        </div>
+      </div>
+      <div class="actions"><button class="primary" id="upload">Upload and install</button></div>
+      <div class="phase">
+        <div class="meter" id="progress" hidden><i id="progressBar"></i></div>
+        <span id="uploadMessage"></span>
       </div>
     </div>
-    <div class="actions"><button id="upload">Upload and install</button></div>
-    <progress id="progress" value="0" max="100" hidden></progress>
-    <p id="uploadMessage" class="muted"></p>
   </div>
 
-  <div class="card" id="githubCard" hidden>
-    <h2>Online updates</h2>
-    <div class="row">
-      <label for="autoUpdates">Install updates automatically at start</label>
-      <div class="control">
-        <label class="switch"><input type="checkbox" id="autoUpdates"><span class="slider"></span></label>
+  <div class="group" id="githubCard" hidden>
+    <p class="eyebrow">Online updates</p>
+    <div class="panel">
+      <div class="row">
+        <span class="label">Latest release<small id="releaseNote">Not checked yet</small></span>
+        <div class="control"><button id="checkForUpdates">Check now</button></div>
       </div>
-    </div>
-    <div class="actions"><button id="checkForUpdates">Check for updates</button></div>
-    <div class="row">
-      <label for="specificFW">Install a specific version</label>
-      <div class="control">
-        <input type="text" id="specificFW" placeholder="v1.2.3" style="width: 7rem">
-        <button class="secondary" id="installSpecific">Install</button>
+      <div class="row">
+        <span class="label">Install updates automatically<small>Checked each time the device starts</small></span>
+        <label class="switch"><input type="checkbox" id="autoUpdates" aria-label="Install updates automatically"><span></span></label>
+      </div>
+      <div class="row">
+        <label class="label" for="specificFW">Install a specific version</label>
+        <div class="control">
+          <input type="text" class="data" id="specificFW" placeholder="v1.2.3" style="width: 7rem">
+          <button id="installSpecific">Install</button>
+        </div>
       </div>
     </div>
   </div>
@@ -940,6 +1025,30 @@ static const char kWebUpdateHtml[] PROGMEM = R"PUWEB(<!DOCTYPE html>
   const fail = (error) => pu.toast(error.message, true);
 
   // ---- file upload ----
+  function showFile() {
+    const file = byId("file").files[0];
+    if (file) {
+      byId("dropTitle").textContent = file.name;
+      byId("dropHint").textContent = Math.round(file.size / 1024) + " KB";
+    }
+  }
+  byId("file").addEventListener("change", showFile);
+  const drop = byId("drop");
+  ["dragenter", "dragover"].forEach((name) => drop.addEventListener(name, (event) => {
+    event.preventDefault();
+    drop.classList.add("over");
+  }));
+  ["dragleave", "drop"].forEach((name) => drop.addEventListener(name, (event) => {
+    event.preventDefault();
+    drop.classList.remove("over");
+  }));
+  drop.addEventListener("drop", (event) => {
+    if (event.dataTransfer.files.length > 0) {
+      byId("file").files = event.dataTransfer.files;
+      showFile();
+    }
+  });
+
   byId("upload").addEventListener("click", () => {
     const file = byId("file").files[0];
     const message = byId("uploadMessage");
@@ -948,7 +1057,7 @@ static const char kWebUpdateHtml[] PROGMEM = R"PUWEB(<!DOCTYPE html>
       return;
     }
     const button = byId("upload");
-    const progress = byId("progress");
+    const bar = byId("progressBar");
     const form = new FormData();
     form.append("file", file, file.name);
 
@@ -956,8 +1065,9 @@ static const char kWebUpdateHtml[] PROGMEM = R"PUWEB(<!DOCTYPE html>
     xhr.open("POST", "/api/pu/update/upload?type=" + byId("kind").value + "&size=" + file.size);
     xhr.upload.onprogress = (event) => {
       if (event.lengthComputable) {
-        progress.value = Math.round(100 * event.loaded / event.total);
-        message.textContent = "Uploading: " + progress.value + " %";
+        const percent = Math.round(100 * event.loaded / event.total);
+        bar.style.width = percent + "%";
+        message.textContent = "Uploading " + percent + " %";
       }
     };
     const done = (text) => { button.disabled = false; message.textContent = text; };
@@ -973,8 +1083,8 @@ static const char kWebUpdateHtml[] PROGMEM = R"PUWEB(<!DOCTYPE html>
       }
     };
     button.disabled = true;
-    progress.hidden = false;
-    progress.value = 0;
+    byId("progress").hidden = false;
+    bar.style.width = "0";
     xhr.send(form);
   });
 
@@ -989,22 +1099,34 @@ static const char kWebUpdateHtml[] PROGMEM = R"PUWEB(<!DOCTYPE html>
     updateButton.textContent = text;
   }
 
+  function note(text, tag) {
+    byId("releaseNote").replaceChildren(tag ? pu.el("span", { className: "tag " + tag }, text) : text);
+  }
+
   function showUpdate(update) {
     latestVersion = update.latest;
     updateAvailable = update.state === "available";
     const busy = update.state === "checking" || update.state === "installing";
-    const labels = {
-      checking: ["Checking...", ""],
-      installing: ["Installing...", "orange"],
-      installed: ["Installed, restarting...", "green"],
-      available: [update.latest + " - install now", "orange"],
-      upToDate: ["Already on the latest version", "green"],
-      failed: ["Error: " + update.message, "red"],
-    };
-    const label = labels[update.state] || ["Check for updates", ""];
-    setButton(label[0], label[1]);
-    if (update.state === "installed") {
+    updateButton.disabled = busy;
+    if (update.state === "checking") {
+      setButton("Checking...");
+    } else if (update.state === "installing") {
+      setButton("Installing...");
+    } else if (update.state === "installed") {
+      setButton("Installed");
+      note("Installed, restarting", "good");
       pu.waitForRestart();
+    } else if (update.state === "available") {
+      setButton("Install " + update.latest, "primary");
+      note(update.latest + " available", "warn");
+    } else if (update.state === "upToDate") {
+      setButton("Check now");
+      note("Up to date", "good");
+    } else if (update.state === "failed") {
+      setButton("Check now");
+      note("Error: " + update.message);
+    } else {
+      setButton("Check now");
     }
     if (!busy && pollTimer !== null) {
       clearInterval(pollTimer);
@@ -1034,25 +1156,28 @@ static const char kWebUpdateHtml[] PROGMEM = R"PUWEB(<!DOCTYPE html>
   byId("autoUpdates").addEventListener("change", (event) => {
     const box = event.target;
     pu.post("/api/pu/autoupdates", { enabled: box.checked })
+      .then(() => pu.toast("Saved"))
       .catch((error) => { box.checked = !box.checked; fail(error); });
   });
 
   updateButton.addEventListener("click", () => {
     if (updateAvailable) {
-      setButton("Installing " + latestVersion + "...", "orange");
+      setButton("Installing " + latestVersion + "...");
       pu.post("/api/pu/update/install").then(pollUpdate).catch(fail);
     } else {
-      setButton("Checking...", "");
+      setButton("Checking...");
       pu.post("/api/pu/update/check").then(pollUpdate).catch(fail);
     }
   });
 
   byId("installSpecific").addEventListener("click", () => {
     const version = byId("specificFW").value.trim();
-    if (version !== "") {
-      setButton("Installing " + version + "...", "orange");
-      pu.post("/api/pu/update/install", { version: version }).then(pollUpdate).catch(fail);
+    if (version === "") {
+      pu.toast("Enter a version first", true);
+      return;
     }
+    setButton("Installing " + version + "...");
+    pu.post("/api/pu/update/install", { version: version }).then(pollUpdate).catch(fail);
   });
 </script>
 </body>

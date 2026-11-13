@@ -31,15 +31,16 @@ const char kAboutHtml[] = R"HTML(<!DOCTYPE html>
 </head>
 <body>
   <h1>About</h1>
+  <p class="lede">This page is plain HTML from the example sketch.</p>
   <div class="content">
-    <div class="card">
-      <p>This page is plain HTML from the example sketch.</p>
-      <p>Free memory: <span class="value" id="heap"></span></p>
+    <div class="tiles">
+      <div class="tile"><span class="label">Free memory</span><strong><span id="heap"></span><i>KB</i></strong></div>
     </div>
+    <div class="card">The menu and the style come from two shared files.</div>
   </div>
   <script>
     pu.get("/api/pu/info").then((info) => {
-      document.getElementById("heap").textContent = Math.round(info.heapFree / 1024) + " KB";
+      document.getElementById("heap").textContent = Math.round(info.heapFree / 1024);
     });
   </script>
 </body>

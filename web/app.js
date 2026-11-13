@@ -1,5 +1,6 @@
 // Shared script of all ProjectUtils pages. Served at /pu/app.js; usable by project pages too.
-// Draws the menu on every page and offers small helpers under the global `pu`.
+// Draws the page list (a rail on wide screens, a drawer behind the menu button on phones) on
+// every page and offers small helpers under the global `pu`.
 "use strict";
 
 const pu = (() => {
@@ -36,12 +37,30 @@ const pu = (() => {
     return node;
   }
 
+  const icons = {
+    home: '<path d="M4 11l8-7 8 7v8a1 1 0 0 1-1 1h-4v-6h-6v6H5a1 1 0 0 1-1-1z"/>',
+    page: '<path d="M7 3h7l4 4v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM14 3v4h4"/>',
+    wifi: '<path d="M3 9a14 14 0 0 1 18 0M6 12.5a9.5 9.5 0 0 1 12 0M9 16a5 5 0 0 1 6 0"/><circle cx="12" cy="19" r=".6"/>',
+    upload: '<path d="M12 16V4m0 0l-4.5 4.5M12 4l4.5 4.5M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/>',
+    terminal: '<rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M7 10l3 2.5L7 15M12.5 15H17"/>',
+    chip: '<rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9.5 3v3M14.5 3v3M9.5 18v3M14.5 18v3M3 9.5h3M3 14.5h3M18 9.5h3M18 14.5h3"/>',
+    menu: '<path d="M4 7h16M4 12h16M4 17h16"/>',
+    lock: '<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
+  };
+
+  // Line icon by name: home, page, wifi, upload, terminal, chip, menu, lock.
+  function icon(name) {
+    const holder = document.createElement("span");
+    holder.innerHTML = '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true">' + icons[name] + "</svg>";
+    return holder.firstChild;
+  }
+
   let toastTimer = null;
   // Short message at the bottom of the page.
   function toast(text, isError) {
     let box = document.getElementById("pu-toast");
     if (!box) {
-      box = el("div", { id: "pu-toast" });
+      box = el("div", { id: "pu-toast", role: "status" });
       document.body.append(box);
     }
     box.textContent = text;
@@ -65,34 +84,48 @@ const pu = (() => {
     { path: "/console", title: "Console" },
     { path: "/info", title: "Device info" },
   ];
+  const builtInIcons = { "/settings": "wifi", "/update": "upload", "/console": "terminal", "/info": "chip" };
 
-  function buildMenu(nav) {
+  let rail = null;
+  let online = null;
+
+  function fillRail(nav) {
     const here = location.pathname;
-    const item = (page) => el("li", null, el("a", {
-      className: "menu__item" + (page.path === here ? " active" : ""),
-      href: page.path,
-    }, page.title));
-    const box = el("ul", { className: "menu__box" });
-    if (nav && nav.deviceName) {
-      box.append(el("li", { className: "menu__device" }, nav.deviceName));
-    }
+    const link = (page, iconName) => {
+      const a = el("a", { href: page.path }, icon(iconName), page.title);
+      if (page.path === here) {
+        a.setAttribute("aria-current", "page");
+      }
+      return a;
+    };
+    online = el("i", { className: "pu-dot" + (nav ? " on" : "") });
+    const status = el("span", { className: "pu-status" }, online, location.host);
     const project = nav ? nav.project : [];
-    project.forEach((page) => box.append(item(page)));
-    if (project.length > 0) {
-      box.append(el("li", { className: "menu__sep" }));
-    }
-    (nav ? nav.device : builtIn).forEach((page) => box.append(item(page)));
-
-    const toggle = el("input", { id: "menu__toggle", type: "checkbox", ariaLabel: "Menu" });
-    const shade = el("div", { className: "menu__shade", onclick: () => { toggle.checked = false; } });
-    document.body.prepend(
-      toggle, el("label", { className: "menu__btn", htmlFor: "menu__toggle" }, el("span")),
-      box, shade);
+    rail.replaceChildren(
+      el("div", { className: "pu-device" }, el("b", null, nav ? nav.deviceName : "Device"), status),
+      ...project.map((page) => link(page, page.path === "/" ? "home" : "page")),
+      ...(project.length > 0 ? [el("hr")] : []),
+      ...(nav ? nav.device : builtIn).map((page) => link(page, builtInIcons[page.path] || "page")));
   }
 
   document.addEventListener("DOMContentLoaded", () => {
-    get("/api/pu/nav").then(buildMenu).catch(() => buildMenu(null));
+    const close = () => document.body.classList.remove("pu-open");
+    rail = el("nav", { className: "pu-rail", ariaLabel: "Pages" });
+    const burger = el("button", {
+      className: "pu-burger", ariaLabel: "Open menu",
+      onclick: () => document.body.classList.add("pu-open"),
+    }, icon("menu"));
+    const bar = el("header", { className: "pu-bar" }, burger, el("b", null, document.title));
+    new MutationObserver(() => { bar.lastChild.textContent = document.title; })
+      .observe(document.querySelector("title"), { childList: true });
+    document.body.prepend(bar, rail, el("button", { className: "pu-scrim", ariaLabel: "Close menu", onclick: close }));
+    fillRail(null);
+    get("/api/pu/nav").then(fillRail).catch(() => {});
+    // the dot in the rail shows whether the device still answers
+    setInterval(() => {
+      get("/api/pu/nav").then(() => online.classList.add("on")).catch(() => online.classList.remove("on"));
+    }, 10000);
   });
 
-  return { get, post, el, toast, waitForRestart };
+  return { get, post, el, icon, toast, waitForRestart };
 })();
