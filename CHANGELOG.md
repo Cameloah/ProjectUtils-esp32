@@ -29,13 +29,22 @@ are kept.
 - The access point timeout counts from when the access point opened, and a fallback access
   point closes by itself once WiFi is back. Lost connections are retried.
 - Web server libraries switched to the maintained `ESP32Async` forks with pinned versions;
-  WebSerial updated to 2.x.
+  The WebSerial dependency is removed; the console is part of the library.
 - The web interface uses a JSON API under `/api/pu/`; changes are made with POST requests.
 - GitHub updates: firmware asset name defaults to `firmware.bin`; the filesystem image is
   optional and both images are written before the device restarts.
 
 ### Added
 
+- A set of web pages with one shared menu and style, all embedded in the firmware: settings,
+  update, console, device info. The menu is drawn on every page by `/pu/app.js`.
+- `pu::Page`: a project home page (and further pages) declared in C++ with inputs bound to
+  settings, buttons, hold-to-run buttons with a safety timeout, live values and status lights.
+  `WebUi::addPage()` and `addMenuLink()` for hand-written pages.
+- Firmware and filesystem upload from the browser (`/update`).
+- Device info page and `GET /api/pu/info` (memory, uptime, reason of the last restart, ...).
+- Network search on the settings page.
+- Own web console (`/console`) with scrollback, timestamps, scroll lock and download.
 - Optional admin password for the settings page, API, web console and ArduinoOTA.
 - `GET /api/pu/log` and `POST /api/pu/restart`.
 - Unit tests for the hardware-independent parts, an example project, and CI that builds for
