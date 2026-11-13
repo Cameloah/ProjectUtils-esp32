@@ -6,285 +6,68 @@
 
 namespace pu {
 
-// web/settings.html
-static const char kSettingsHtml[] PROGMEM = R"PUWEB(<!DOCTYPE html>
-<html lang="en">
-<head>
-  <title>Device Settings</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <link rel="icon" href="data:,">
-  <link rel="stylesheet" type="text/css" href="/style.css">
-</head>
-<body>
-  <div class="hamburger-menu">
-    <input id="menu__toggle" type="checkbox" />
-    <label class="menu__btn" for="menu__toggle">
-      <span></span>
-    </label>
-
-    <ul class="menu__box">
-      <li><a class="menu__item" href="/">Home</a></li>
-      <li><a class="menu__item" href="/settings">Network settings</a></li>
-      <li><a class="menu__item" href="/webserial">Webserial</a></li>
-    </ul>
-  </div>
-  <h1>Device Settings</h1>
-<div class="content">
-  <div class="card-grid">
-    <div class="card">
-      <div class="settings">
-        <form id="settingsForm">
-          <h2>General</h2>
-          <div class="twocolumns">
-            <div class="setting_box">
-              <label for="deviceName">Device Name</label>
-            </div>
-            <div class="setting_box">
-              <input type="text" id="deviceName" name="deviceName" value=""><br>
-            </div>
-          </div>
-          <br><br>
-
-          <h2>Network</h2>
-
-          <div class="twocolumns">
-            <div class="setting_box">
-              <label for="ssid">WiFi Name</label>
-            </div>
-            <div class="setting_box">
-              <input type="text" id="ssid" name="ssid"><br>
-            </div>
-          </div>
-
-          <div class="twocolumns">
-            <div class="setting_box">
-              <label for="pass">Password</label>
-            </div>
-            <div class="setting_box">
-              <input type="password" id="pass" name="pass" autocomplete="off"><br>
-            </div>
-          </div>
-
-          <div class="twocolumns">
-            <div class="setting_box">
-              <label for="ip">IP Address</label>
-            </div>
-            <div class="setting_box">
-              <input type="text" id="ip" name="ip" placeholder="automatic (DHCP)"><br>
-            </div>
-          </div>
-
-          <div class="twocolumns">
-            <div class="setting_box">
-              <label for="gateway">Gateway Address</label>
-            </div>
-            <div class="setting_box">
-              <input type="text" id="gateway" name="gateway"><br>
-            </div>
-          </div>
-          <br><br>
-
-          <input type="submit" value="Submit">
-          <p id="formMessage"></p>
-          <br><br>
-
-          <hr width="auto" />
-        </form>
-
-        <h2>Advanced</h2>
-
-        <div class="twocolumns">
-          <div>
-            <label for="autoUpdates">Automatic Updates</label>
-          </div>
-          <div class="setting_box">
-            <label class="switch">
-              <input type="checkbox" id="autoUpdates">
-              <span class="slider round"></span>
-            </label>
-          </div>
-        </div>
-        <br>
-
-        <button id="checkForUpdates">Check for Updates</button>
-        <br><br>
-
-        <div class="twocolumns">
-          <div class="setting_box">
-            <label for="specificFW">Install Firmware Version:</label>
-          </div>
-          <div class="setting_box">
-            <input type="text" id="specificFW" name="specificFW" value="" width="10px">
-          </div>
-          <div>
-            <button id="installSpecific">Install</button>
-          </div>
-        </div>
-        <br>
-        <p id="firmwareInfo"></p>
-        <br>
-      </div>
-    </div>
-  </div>
-</div>
-
-<script>
-  const byId = (id) => document.getElementById(id);
-  const updateButton = byId("checkForUpdates");
-  let latestVersion = "";
-  let updateAvailable = false;
-  let pollTimer = null;
-
-  function post(path, params) {
-    return fetch(path, { method: "POST", body: new URLSearchParams(params || {}) })
-      .then((response) => response.json());
-  }
-
-  function getStatus() {
-    return fetch("/api/pu/status").then((response) => response.json());
-  }
-
-  function setButton(button, text, color) {
-    button.classList.remove("green", "red", "orange");
-    if (color) {
-      button.classList.add(color);
-    }
-    button.textContent = text;
-  }
-
-  function showUpdate(update) {
-    latestVersion = update.latest;
-    updateAvailable = update.state === "available";
-    const busy = update.state === "checking" || update.state === "installing";
-    if (!update.configured) {
-      setButton(updateButton, "Updates not configured", null);
-      updateButton.disabled = true;
-    } else if (update.state === "checking") {
-      setButton(updateButton, "Checking...", null);
-    } else if (update.state === "installing") {
-      setButton(updateButton, "Installing...", "orange");
-    } else if (update.state === "installed") {
-      setButton(updateButton, "Installed, restarting...", "green");
-    } else if (update.state === "available") {
-      setButton(updateButton, update.latest + " - Install now", "orange");
-    } else if (update.state === "upToDate") {
-      setButton(updateButton, "Already on latest version", "green");
-    } else if (update.state === "failed") {
-      setButton(updateButton, "Error: " + update.message, "red");
-    } else {
-      setButton(updateButton, "Check for Updates", null);
-    }
-    if (!busy && pollTimer !== null) {
-      clearInterval(pollTimer);
-      pollTimer = null;
-    }
-  }
-
-  // Update checks and installs run in the background on the device, so poll until done.
-  function pollUpdate() {
-    if (pollTimer === null) {
-      pollTimer = setInterval(() => {
-        getStatus().then((status) => showUpdate(status.update)).catch(() => {});
-      }, 1000);
-    }
-  }
-
-  getStatus().then((status) => {
-    byId("deviceName").value = status.deviceName;
-    byId("ssid").value = status.wifi.ssid;
-    byId("pass").placeholder = status.wifi.passwordSet ? "unchanged" : "";
-    byId("ip").value = status.wifi.localIP;
-    byId("gateway").value = status.wifi.gateway;
-    byId("autoUpdates").checked = status.autoUpdates;
-    byId("firmwareInfo").textContent = "Installed firmware: " + status.firmware;
-    showUpdate(status.update);
-    if (status.update.state === "checking" || status.update.state === "installing") {
-      pollUpdate();
-    }
-  });
-
-  byId("settingsForm").addEventListener("submit", (event) => {
-    event.preventDefault();
-    const message = byId("formMessage");
-    post("/api/pu/settings", new FormData(event.target))
-      .then((result) => { message.textContent = result.message; })
-      .catch(() => { message.textContent = "Saving failed: no answer from the device."; });
-  });
-
-  byId("autoUpdates").addEventListener("change", (event) => {
-    const box = event.target;
-    post("/api/pu/autoupdates", { enabled: box.checked })
-      .then((result) => { if (!result.ok) { box.checked = !box.checked; } })
-      .catch(() => { box.checked = !box.checked; });
-  });
-
-  updateButton.addEventListener("click", () => {
-    if (updateAvailable) {
-      setButton(updateButton, "Installing " + latestVersion + "...", "orange");
-      post("/api/pu/update/install").then(pollUpdate);
-    } else {
-      setButton(updateButton, "Checking...", null);
-      post("/api/pu/update/check").then(pollUpdate);
-    }
-  });
-
-  byId("installSpecific").addEventListener("click", () => {
-    const version = byId("specificFW").value.trim();
-    if (version !== "") {
-      setButton(updateButton, "Installing " + version + "...", "orange");
-      post("/api/pu/update/install", { version: version }).then(pollUpdate);
-    }
-  });
-</script>
-
-</body>
-</html>
-)PUWEB";
-
-// web/style.css
-static const char kStyleCss[] PROGMEM = R"PUWEB(:root {
-  --border-radius: 10px;
+// web/app.css
+static const char kWebAppCss[] PROGMEM = R"PUWEB(/* Shared style of all ProjectUtils pages. Served at /pu/app.css; usable by project pages too. */
+:root {
+  --radius: 10px;
+  --bg: #f4f6f8;
+  --card: #ffffff;
+  --text: #1c1e21;
+  --muted: #667078;
+  --line: #d5dbe0;
+  --accent: #007bff;
+  --accent-hover: #1282a2;
+  --menu: #eceff1;
+  --menu-hover: #cfd8dc;
+  --green: #009b0d;
+  --orange: #e0a800;
+  --red: #ad0f0f;
+  --shadow: 0 .45rem 2.2rem rgba(90, 97, 105, .1), 0 .25rem .55rem rgba(90, 97, 105, .12);
 }
 
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #15181b;
+    --card: #1f2428;
+    --text: #e6e9ec;
+    --muted: #9aa4ad;
+    --line: #3a4249;
+    --menu: #262c31;
+    --menu-hover: #343c43;
+    --shadow: 0 .25rem 1rem rgba(0, 0, 0, .5);
+  }
+}
+
+* { box-sizing: border-box; }
 
 html {
-  font-family: -apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue,Arial,Noto Sans,sans-serif,Apple Color Emoji,Segoe UI Emoji,Segoe UI Symbol,Noto Color Emoji;
-  display: inline-block;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-size: 16px;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
   text-align: center;
 }
 
-h1 {
-  font-size: 1.8rem;
-  color: black;
-}
+h1 { font-size: 1.6rem; margin: 0; padding: 18px 60px; min-height: 70px; }
+h2 { font-size: 1.25rem; margin: 1.6rem 0 .6rem; }
+h2:first-child { margin-top: .4rem; }
+p { margin: .6rem 0; }
+a { color: var(--accent); }
+hr { border: none; border-top: 1px solid var(--line); margin: 1.6rem 0; }
+.muted { color: var(--muted); font-size: .9rem; }
 
-h2 {
-  font-size: 1.4rem;
-  font-weight: bold;
-  color: black;
-}
-
-p {
-  font-size: 1.4rem;
-}
-
-#menu__toggle {
-  opacity: 0;
-}
-#menu__toggle:checked + .menu__btn > span {
-  transform: rotate(45deg);
-}
-#menu__toggle:checked + .menu__btn > span::before {
-  top: 0;
-  transform: rotate(0deg);
-}
-#menu__toggle:checked + .menu__btn > span::after {
-  top: 0;
-  transform: rotate(90deg);
-}
-#menu__toggle:checked ~ .menu__box {
-  left: 0 !important;
-}
+/* ---------- burger menu ---------- */
+#menu__toggle { position: fixed; opacity: 0; pointer-events: none; }
+#menu__toggle:checked + .menu__btn > span { transform: rotate(45deg); }
+#menu__toggle:checked + .menu__btn > span::before { top: 0; transform: rotate(0deg); }
+#menu__toggle:checked + .menu__btn > span::after { top: 0; transform: rotate(90deg); }
+#menu__toggle:checked ~ .menu__box { left: 0; }
+#menu__toggle:checked ~ .menu__shade { display: block; }
+#menu__toggle:focus-visible + .menu__btn { outline: 2px solid var(--accent); outline-offset: 6px; }
 .menu__btn {
   position: fixed;
   top: 20px;
@@ -292,266 +75,128 @@ p {
   width: 30px;
   height: 30px;
   cursor: pointer;
-  z-index: 1;
+  z-index: 3;
 }
 .menu__btn > span,
 .menu__btn > span::before,
 .menu__btn > span::after {
   display: block;
   position: absolute;
+  top: 13px;
   width: 100%;
   height: 3px;
-  background-color: #464444;
+  background-color: var(--text);
   border-radius: 2px;
   transition-duration: .25s;
 }
-.menu__btn > span::before {
-  content: '';
-  top: -8px;
-}
-.menu__btn > span::after {
-  content: '';
-  top: 8px;
-}
+.menu__btn > span::before { content: ""; top: -8px; }
+.menu__btn > span::after { content: ""; top: 8px; }
 .menu__box {
-  display: block;
   position: fixed;
   top: 0;
-  left: -100%;
+  left: -320px;
   width: 300px;
+  max-width: 85vw;
   height: 100%;
   margin: 0;
-  padding: 80px 0;
+  padding: 70px 0 20px;
   list-style: none;
-  background-color: #ECEFF1;
-  box-shadow: 0 .46875rem 2.1875rem rgba(90, 97, 105, .1), 0 .9375rem 1.40625rem rgba(90, 97, 105, .1), 0 .25rem .53125rem rgba(90, 97, 105, .12), 0 .125rem .1875rem rgba(90, 97, 105, .1);
+  text-align: left;
+  background-color: var(--menu);
+  box-shadow: var(--shadow);
   transition-duration: .25s;
+  overflow-y: auto;
+  z-index: 2;
 }
+.menu__shade { display: none; position: fixed; inset: 0; z-index: 1; }
+.menu__device { padding: 0 24px 12px; color: var(--muted); font-size: .9rem; }
+.menu__sep { border-top: 1px solid var(--line); margin: 8px 0; }
 .menu__item {
   display: block;
   padding: 12px 24px;
-  color: #333;
-  font-size: 20px;
+  color: var(--text);
+  font-size: 1.15rem;
   font-weight: bold;
   text-decoration: none;
-  transition-duration: .25s;
 }
-.menu__item:hover {
-  background-color: #CFD8DC;
-}
+.menu__item:hover { background-color: var(--menu-hover); }
+.menu__item.active { border-left: 4px solid var(--accent); padding-left: 20px; }
 
-body {
-  margin: 0;
-}
-
-.content {
-  padding: 0% 5%;
-}
-
-.card-grid {
-  max-width: 800px;
-  margin: 0 auto;
-  display: grid;
-  grid-gap: 2rem;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-}
-
+/* ---------- layout ---------- */
+.content { padding: 0 12px 40px; }
 .card {
-  background-color: white;
-  box-shadow: 0 .46875rem 2.1875rem rgba(90, 97, 105, .1), 0 .9375rem 1.40625rem rgba(90, 97, 105, .1), 0 .25rem .53125rem rgba(90, 97, 105, .12), 0 .125rem .1875rem rgba(90, 97, 105, .1);
-  border-radius: var(--border-radius);
-  padding: 20px;
+  max-width: 640px;
+  margin: 0 auto 1.5rem;
+  padding: 20px 24px;
+  background-color: var(--card);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
 }
-
-.card-title {
-  font-size: 1.2rem;
-  font-weight: bold;
-  color: #034078
-}
-
-input[type=submit] {
-  border: none;
-  color: #FEFCFB;
-  background-color: #007bff;
-  padding: 12px 15px;
-  text-align: center;
-  text-decoration: none;
-  display: inline-block;
-  font-size: 16px;
-  width: 100px;
-  border-radius: var(--border-radius);
-  transition-duration: 0.4s;
-}
-
-input[type=submit]:hover {
-  background-color: #1282A2;
-  cursor: pointer;
-}
-
-input[type=text], input[type=number], select {
-  padding: 12px 20px;
-  display: block;
-  border: 1px solid #ccc;
-  border-radius: var(--border-radius);
-  width: auto;
-}
-
-input[type=password], input[type=number], select {
-  padding: 12px 20px;
-  display: block;
-  border: 1px solid #ccc;
-  border-radius: var(--border-radius);
-  width: auto;
-}
-
-label {
-  font-size: 1.2rem;
-}
-
-.value{
-  font-size: 1.2rem;
-  color: #1282A2;
-}
-
-.state {
-  font-size: 1.2rem;
-  color: #1282A2;
-}
-
-button {
-  border: none;
-  color: #FEFCFB;
-  background-color: #007bff;
-  padding: 12px 15px;
-  text-align: center;
-  text-decoration: none;
-  display: inline-block;
-  font-size: 16px;
-  width: auto;
-  border-radius: var(--border-radius);
-  transition-duration: 0.4s;
-}
-
-button:hover {
-  background-color: #1282A2;
-  cursor: pointer;
-}
-
-.button-on {
-  background-color: #034078;
-}
-
-.button-on:hover {
-  background-color: #1282A2;
-}
-
-.button-off {
-  background-color: #858585;
-}
-
-.button-off:hover {
-  background-color: #252524;
-}
-
-button.red {
-  background-color: rgb(173, 15, 15);
-}
-
-button.orange {
-  background-color: rgb(255, 196, 0);
-}
-
-button.green {
-  background-color: rgb(0, 155, 13);
-}
-
-button.button-30 {
-  padding: 12px 15px;
-  text-align: center;
-  display: inline-block;
-  font-size: 16px;
-  width: 100px;
-  border-radius: var(--border-radius);
+.row {
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  appearance: none;
-  background-color: #007bff;
-  border-width: 0;
-  box-shadow: rgba(45, 35, 66, 0.4) 0 2px 4px, rgba(45, 35, 66, 0.3) 0 7px 13px -3px, #D6D6E7 0 -3px 0 inset;
-  box-sizing: border-box;
-  color: #ffffff;
+  justify-content: space-between;
+  gap: 8px 16px;
+  padding: 10px 0;
+  text-align: left;
+}
+.row > label, .row > .label { font-size: 1.05rem; flex: 1 1 30%; }
+.row > .control { display: flex; align-items: center; gap: 8px; flex: 0 1 auto; max-width: 100%; }
+.actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; padding: 12px 0; }
+.unit { color: var(--muted); min-width: 1.2em; }
+.value { font-size: 1.15rem; font-weight: bold; color: var(--accent); }
+
+/* ---------- controls ---------- */
+input[type=text], input[type=password], input[type=number], select {
+  padding: 10px 14px;
+  font-size: 1rem;
+  color: var(--text);
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  width: 12rem;
+  max-width: 100%;
+}
+input[type=number] { width: 7rem; }
+input[type=file] { max-width: 12rem; }
+input[type=range] { width: 9rem; max-width: 100%; accent-color: var(--accent); }
+input.saved { border-color: var(--green); }
+input.invalid, select.invalid { border-color: var(--red); }
+
+button, input[type=submit], .button {
+  border: none;
+  color: #fefcfb;
+  background-color: var(--accent);
+  padding: 12px 18px;
+  font-size: 1rem;
+  border-radius: var(--radius);
   cursor: pointer;
-  height: 40px;
-  justify-content: center;
-  line-height: 1;
-  list-style: none;
-  overflow: hidden;
-  position: relative;
-  text-decoration: none;
-  transition: box-shadow .15s, transform .15s;
+  transition: background-color .3s;
+  touch-action: manipulation;
   user-select: none;
   -webkit-user-select: none;
-  touch-action: manipulation;
-  white-space: nowrap;
-  will-change: box-shadow, transform;
 }
+button:hover, input[type=submit]:hover { background-color: var(--accent-hover); }
+button:disabled { opacity: .5; cursor: default; }
+button.secondary { background-color: #6c757d; }
+button.green { background-color: var(--green); }
+button.orange { background-color: var(--orange); }
+button.red { background-color: var(--red); }
+button.hold { min-width: 110px; box-shadow: inset 0 -3px 0 rgba(0, 0, 0, .25); }
+button.hold.active { box-shadow: inset 0 3px 6px rgba(0, 0, 0, .45); transform: translateY(2px); }
 
-button.button-30:hover {
-  box-shadow: rgba(45, 35, 66, 0.4) 0 4px 8px, rgba(45, 35, 66, 0.3) 0 7px 13px -3px, #D6D6E7 0 -3px 0 inset;
-  transform: translateY(-2px);
-}
-
-button.button-30:active {
-  box-shadow: #D6D6E7 0 3px 7px inset;
-  transform: translateY(2px);
-}
-
-.twocolumns {
-  display: flex;
-  flex-direction: row;
-  justify-content: space-between;
-  padding: 20px;
-  flex-wrap: wrap;
-}
-
-.setting_box {
-  display: flex;
-  align-items: center; /* Aligns items vertically in the middle */
-}
-
-.settings {
-  width: 75%;
-  margin: auto;
-}
-
-/* The switch - the box around the slider */
-.switch {
-  position: relative;
-  display: inline-block;
-  width: 60px;
-  height: 34px;
-}
-
-/* Hide default HTML checkbox */
-.switch input {
-  opacity: 0;
-  width: 0;
-  height: 0;
-}
-
-/* The slider */
+.switch { position: relative; display: inline-block; width: 60px; height: 34px; flex: none; }
+.switch input { opacity: 0; width: 0; height: 0; }
 .slider {
   position: absolute;
+  inset: 0;
   cursor: pointer;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: #ccc;
-  -webkit-transition: .4s;
-  transition: .4s;
+  background-color: #b5bcc2;
+  border-radius: 34px;
+  transition: .3s;
 }
-
-.slider:before {
+.slider::before {
   position: absolute;
   content: "";
   height: 26px;
@@ -559,32 +204,859 @@ button.button-30:active {
   left: 4px;
   bottom: 4px;
   background-color: white;
-  -webkit-transition: .4s;
-  transition: .4s;
-}
-
-input:checked + .slider {
-  background-color: #007bff;
-}
-
-input:focus + .slider {
-  box-shadow: 0 0 1px #2196F3;
-}
-
-input:checked + .slider:before {
-  -webkit-transform: translateX(26px);
-  -ms-transform: translateX(26px);
-  transform: translateX(26px);
-}
-
-/* Rounded sliders */
-.slider.round {
-  border-radius: 34px;
-}
-
-.slider.round:before {
   border-radius: 50%;
+  transition: .3s;
 }
+input:checked + .slider { background-color: var(--accent); }
+input:focus-visible + .slider { box-shadow: 0 0 0 2px var(--accent-hover); }
+input:checked + .slider::before { transform: translateX(26px); }
+
+.dot { display: inline-block; width: 18px; height: 18px; border-radius: 50%; background: #b5bcc2; }
+.dot.on { background: var(--green); box-shadow: 0 0 8px var(--green); }
+.dot.on.orange { background: var(--orange); box-shadow: 0 0 8px var(--orange); }
+.dot.on.red { background: var(--red); box-shadow: 0 0 8px var(--red); }
+
+progress { width: 100%; height: 14px; accent-color: var(--accent); }
+
+/* ---------- tables, logs, console ---------- */
+table.info { width: 100%; border-collapse: collapse; text-align: left; }
+table.info td { padding: 7px 4px; border-bottom: 1px solid var(--line); vertical-align: top; }
+table.info td:first-child { color: var(--muted); width: 45%; }
+pre.log, .terminal {
+  margin: 0;
+  padding: 12px;
+  text-align: left;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: .85rem;
+  line-height: 1.35;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: #d8dee4;
+  background: #101418;
+  border-radius: var(--radius);
+  overflow-y: auto;
+}
+pre.log { max-height: 50vh; }
+.terminal { height: 55vh; }
+.terminal .time { color: #6f7b86; }
+.terminal .sent { color: #6cb6ff; }
+.list { list-style: none; margin: 0; padding: 0; text-align: left; }
+.list li {
+  display: flex;
+  justify-content: space-between;
+  padding: 10px 6px;
+  border-bottom: 1px solid var(--line);
+  cursor: pointer;
+}
+.list li:hover { background: var(--menu-hover); }
+
+#pu-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 20px;
+  transform: translateX(-50%);
+  max-width: 90vw;
+  padding: 10px 18px;
+  color: #fff;
+  background: #323a41;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .3s;
+  z-index: 5;
+}
+#pu-toast.show { opacity: 1; }
+#pu-toast.error { background: var(--red); }
+)PUWEB";
+
+// web/app.js
+static const char kWebAppJs[] PROGMEM = R"PUWEB(// Shared script of all ProjectUtils pages. Served at /pu/app.js; usable by project pages too.
+// Draws the menu on every page and offers small helpers under the global `pu`.
+"use strict";
+
+const pu = (() => {
+  async function request(path, options) {
+    const response = await fetch(path, options);
+    const type = response.headers.get("Content-Type") || "";
+    const body = type.includes("json") ? await response.json() : await response.text();
+    if (!response.ok) {
+      const error = new Error((body && body.message) || "HTTP " + response.status);
+      error.status = response.status;
+      throw error;
+    }
+    return body;
+  }
+
+  // GET a JSON or text resource from the device.
+  const get = (path) => request(path);
+
+  // POST form parameters (an object or FormData) to the device.
+  const post = (path, params) =>
+    request(path, { method: "POST", body: new URLSearchParams(params || {}) });
+
+  // Create an element: pu.el("button", { className: "red", onclick: f }, "Stop")
+  function el(tag, props, ...children) {
+    const node = document.createElement(tag);
+    Object.entries(props || {}).forEach(([key, value]) => {
+      if (key in node) {
+        node[key] = value;
+      } else {
+        node.setAttribute(key, value);
+      }
+    });
+    children.forEach((child) => node.append(child));
+    return node;
+  }
+
+  let toastTimer = null;
+  // Short message at the bottom of the page.
+  function toast(text, isError) {
+    let box = document.getElementById("pu-toast");
+    if (!box) {
+      box = el("div", { id: "pu-toast" });
+      document.body.append(box);
+    }
+    box.textContent = text;
+    box.className = isError ? "show error" : "show";
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { box.className = ""; }, isError ? 6000 : 2500);
+  }
+
+  // After the device was told to restart: wait until it answers again, then reload the page.
+  function waitForRestart() {
+    toast("Device is restarting...");
+    const poll = () => {
+      get("/api/pu/nav").then(() => location.reload()).catch(() => setTimeout(poll, 1000));
+    };
+    setTimeout(poll, 4000);
+  }
+
+  const builtIn = [
+    { path: "/settings", title: "Settings" },
+    { path: "/update", title: "Update" },
+    { path: "/console", title: "Console" },
+    { path: "/info", title: "Device info" },
+  ];
+
+  function buildMenu(nav) {
+    const here = location.pathname;
+    const item = (page) => el("li", null, el("a", {
+      className: "menu__item" + (page.path === here ? " active" : ""),
+      href: page.path,
+    }, page.title));
+    const box = el("ul", { className: "menu__box" });
+    if (nav && nav.deviceName) {
+      box.append(el("li", { className: "menu__device" }, nav.deviceName));
+    }
+    const project = nav ? nav.project : [];
+    project.forEach((page) => box.append(item(page)));
+    if (project.length > 0) {
+      box.append(el("li", { className: "menu__sep" }));
+    }
+    (nav ? nav.device : builtIn).forEach((page) => box.append(item(page)));
+
+    const toggle = el("input", { id: "menu__toggle", type: "checkbox", ariaLabel: "Menu" });
+    const shade = el("div", { className: "menu__shade", onclick: () => { toggle.checked = false; } });
+    document.body.prepend(
+      toggle, el("label", { className: "menu__btn", htmlFor: "menu__toggle" }, el("span")),
+      box, shade);
+  }
+
+  document.addEventListener("DOMContentLoaded", () => {
+    get("/api/pu/nav").then(buildMenu).catch(() => buildMenu(null));
+  });
+
+  return { get, post, el, toast, waitForRestart };
+})();
+)PUWEB";
+
+// web/console.html
+static const char kWebConsoleHtml[] PROGMEM = R"PUWEB(<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Console</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/pu/app.css">
+  <script src="/pu/app.js"></script>
+</head>
+<body>
+<h1>Console</h1>
+<div class="content">
+  <div class="card" style="max-width: 900px">
+    <div class="terminal" id="output"></div>
+    <form class="row" id="sendForm">
+      <input type="text" id="command" placeholder="Type a command" autocomplete="off"
+             autocapitalize="off" spellcheck="false" style="flex: 1 1 12rem; width: auto">
+      <input type="submit" value="Send">
+    </form>
+    <div class="actions">
+      <label><input type="checkbox" id="timestamps" checked> Timestamps</label>
+      <label><input type="checkbox" id="follow" checked> Follow output</label>
+      <button class="secondary" id="clear">Clear</button>
+      <button class="secondary" id="download">Download</button>
+    </div>
+    <p class="muted" id="state">Connecting...</p>
+  </div>
+</div>
+
+<script>
+  const byId = (id) => document.getElementById(id);
+  const output = byId("output");
+  const maxLines = 2000;
+  const history = [];
+  let historyIndex = 0;
+  let socket = null;
+
+  function addLine(text, className) {
+    const time = new Date().toTimeString().substring(0, 8);
+    const line = pu.el("div", { className: className || "" },
+      pu.el("span", { className: "time", hidden: !byId("timestamps").checked }, time + " "), text);
+    output.append(line);
+    while (output.childElementCount > maxLines) {
+      output.firstElementChild.remove();
+    }
+    if (byId("follow").checked) {
+      output.scrollTop = output.scrollHeight;
+    }
+  }
+
+  function connect() {
+    const retry = () => {
+      byId("state").textContent = "Disconnected, trying again...";
+      setTimeout(connect, 2000);
+    };
+    // The token stands in for the login, which browsers do not send along with a websocket.
+    pu.get("/api/pu/console/token").then((result) => {
+      const scheme = location.protocol === "https:" ? "wss://" : "ws://";
+      socket = new WebSocket(scheme + location.host + "/api/pu/console/ws?token=" + result.token);
+      socket.onopen = () => { byId("state").textContent = "Connected"; };
+      socket.onmessage = (event) => {
+        // one message holds one or more lines
+        String(event.data).split("\n").forEach((line) => addLine(line));
+      };
+      socket.onclose = retry;
+    }).catch(retry);
+  }
+  connect();
+
+  byId("sendForm").addEventListener("submit", (event) => {
+    event.preventDefault();
+    const input = byId("command");
+    if (socket && socket.readyState === WebSocket.OPEN) {
+      socket.send(input.value);
+      addLine("> " + input.value, "sent");
+      if (input.value !== "" && history[history.length - 1] !== input.value) {
+        history.push(input.value);
+      }
+      historyIndex = history.length;
+      input.value = "";
+    } else {
+      pu.toast("Not connected", true);
+    }
+  });
+
+  byId("command").addEventListener("keydown", (event) => {
+    if (event.key !== "ArrowUp" && event.key !== "ArrowDown") {
+      return;
+    }
+    event.preventDefault();
+    historyIndex = Math.max(0, Math.min(history.length, historyIndex + (event.key === "ArrowUp" ? -1 : 1)));
+    event.target.value = history[historyIndex] || "";
+  });
+
+  byId("timestamps").addEventListener("change", (event) => {
+    output.querySelectorAll(".time").forEach((span) => { span.hidden = !event.target.checked; });
+  });
+  byId("clear").addEventListener("click", () => output.replaceChildren());
+  byId("download").addEventListener("click", () => {
+    const text = Array.from(output.children).map((line) => line.textContent).join("\n") + "\n";
+    const link = pu.el("a", {
+      href: URL.createObjectURL(new Blob([text], { type: "text/plain" })),
+      download: "console-" + new Date().toISOString().substring(0, 19).replace(/:/g, "-") + ".txt",
+    });
+    link.click();
+    URL.revokeObjectURL(link.href);
+  });
+</script>
+</body>
+</html>
+)PUWEB";
+
+// web/info.html
+static const char kWebInfoHtml[] PROGMEM = R"PUWEB(<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Device info</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/pu/app.css">
+  <script src="/pu/app.js"></script>
+</head>
+<body>
+<h1>Device info</h1>
+<div class="content">
+  <div class="card">
+    <table class="info" id="info"></table>
+    <div class="actions"><button class="red" id="restart">Restart device</button></div>
+  </div>
+  <div class="card">
+    <h2>Log</h2>
+    <pre class="log" id="log"></pre>
+    <div class="actions"><button class="secondary" id="refreshLog">Refresh</button></div>
+  </div>
+</div>
+
+<script>
+  const byId = (id) => document.getElementById(id);
+  const kb = (bytes) => Math.round(bytes / 1024) + " KB";
+
+  function duration(seconds) {
+    const days = Math.floor(seconds / 86400);
+    const clock = new Date((seconds % 86400) * 1000).toISOString().substring(11, 19);
+    return (days > 0 ? days + " d " : "") + clock;
+  }
+
+  function showInfo(info) {
+    const rows = [
+      ["Name", info.deviceName],
+      ["Firmware", info.firmware],
+      ["Address", info.ip + " (" + info.hostname + ".local)"],
+      ["WiFi", info.connected ? info.ssid + ", " + info.rssi + " dBm" : "not connected (" + info.mode + ")"],
+      ["MAC address", info.mac],
+      ["Time", info.time],
+      ["Running for", duration(info.uptimeSeconds)],
+      ["Last start reason", info.resetReason],
+      ["Free memory", kb(info.heapFree) + " of " + kb(info.heapSize) + " (lowest " + kb(info.heapMinFree) + ")"],
+      ["Firmware size", kb(info.sketchSize) + " of " + kb(info.sketchSize + info.sketchFree)],
+      ["Chip", info.chip + " rev " + info.chipRevision + ", " + info.cores + " cores, " + info.cpuMHz + " MHz"],
+      ["Flash size", kb(info.flashSize)],
+      ["SDK", info.sdk],
+    ];
+    byId("info").replaceChildren(...rows.map(([name, value]) =>
+      pu.el("tr", null, pu.el("td", null, name), pu.el("td", null, String(value)))));
+  }
+
+  const loadInfo = () => pu.get("/api/pu/info").then(showInfo).catch(() => {});
+  const loadLog = () => pu.get("/api/pu/log").then((text) => {
+    const log = byId("log");
+    log.textContent = text;
+    log.scrollTop = log.scrollHeight;
+  }).catch((error) => pu.toast(error.message, true));
+
+  loadInfo();
+  loadLog();
+  setInterval(loadInfo, 5000);
+  byId("refreshLog").addEventListener("click", loadLog);
+  byId("restart").addEventListener("click", () => {
+    if (confirm("Restart the device now?")) {
+      pu.post("/api/pu/restart").then(pu.waitForRestart).catch((error) => pu.toast(error.message, true));
+    }
+  });
+</script>
+</body>
+</html>
+)PUWEB";
+
+// web/page.html
+static const char kWebPageHtml[] PROGMEM = R"PUWEB(<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Device</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/pu/app.css">
+  <script src="/pu/app.js"></script>
+</head>
+<body>
+<h1 id="title"></h1>
+<div class="content">
+  <div class="card" id="card"></div>
+</div>
+
+<script>
+  // Renders a page that the project declared in C++ (pu::Page). Layout and values come from
+  // /api/pu/page; every control reports back through /api/pu/page/widget.
+  const path = location.pathname;
+  const card = document.getElementById("card");
+  const updaters = []; // per widget: function(value) that shows a value coming from the device
+  const fail = (error) => pu.toast(error.message, true);
+
+  function send(index, action, value) {
+    const params = { path: path, widget: index, action: action };
+    if (value !== undefined) {
+      params.value = value;
+    }
+    return pu.post("/api/pu/page/widget", params);
+  }
+
+  function row(widget, ...controls) {
+    const control = pu.el("div", { className: "control" }, ...controls);
+    if (widget.unit) {
+      control.append(pu.el("span", { className: "unit" }, widget.unit));
+    }
+    return pu.el("div", { className: "row" }, pu.el("span", { className: "label" }, widget.label), control);
+  }
+
+  // Saves an input when it changes and flashes its border as feedback.
+  function bindInput(input, index, read) {
+    input.addEventListener("change", () => {
+      send(index, "set", read()).then(() => {
+        input.classList.remove("invalid");
+        input.classList.add("saved");
+        setTimeout(() => input.classList.remove("saved"), 1200);
+      }).catch((error) => { input.classList.add("invalid"); fail(error); });
+    });
+  }
+
+  function range(input, widget) {
+    ["min", "max", "step"].forEach((name) => {
+      if (widget[name] !== undefined) {
+        input[name] = widget[name];
+      }
+    });
+  }
+
+  const builders = {
+    section(widget) {
+      return pu.el("h2", null, widget.label);
+    },
+    number(widget, index) {
+      const input = pu.el("input", { type: "number", step: "any" });
+      range(input, widget);
+      bindInput(input, index, () => input.value);
+      updaters[index] = (value) => { if (document.activeElement !== input) { input.value = value; } };
+      return row(widget, input);
+    },
+    text(widget, index) {
+      const input = pu.el("input", { type: "text", maxLength: 200 });
+      bindInput(input, index, () => input.value);
+      updaters[index] = (value) => { if (document.activeElement !== input) { input.value = value; } };
+      return row(widget, input);
+    },
+    select(widget, index) {
+      const input = pu.el("select", null, ...widget.options.map((option) => pu.el("option", null, option)));
+      bindInput(input, index, () => input.value);
+      updaters[index] = (value) => { if (document.activeElement !== input) { input.value = value; } };
+      return row(widget, input);
+    },
+    toggle(widget, index) {
+      const input = pu.el("input", { type: "checkbox" });
+      input.addEventListener("change", () => {
+        send(index, "set", input.checked).catch((error) => { input.checked = !input.checked; fail(error); });
+      });
+      updaters[index] = (value) => { input.checked = value; };
+      return row(widget, pu.el("label", { className: "switch" }, input, pu.el("span", { className: "slider" })));
+    },
+    slider(widget, index) {
+      const input = pu.el("input", { type: "range" });
+      range(input, widget);
+      const shown = pu.el("span", { className: "value" });
+      let dragging = false;
+      let lastSent = 0;
+      input.addEventListener("input", () => {
+        dragging = true;
+        shown.textContent = input.value;
+        if (Date.now() - lastSent > 150) { // live feedback while dragging, without flooding
+          lastSent = Date.now();
+          send(index, "set", input.value).catch(() => {});
+        }
+      });
+      input.addEventListener("change", () => {
+        dragging = false;
+        send(index, "set", input.value).catch(fail);
+      });
+      updaters[index] = (value) => {
+        if (!dragging) { input.value = value; shown.textContent = input.value; }
+      };
+      return row(widget, input, shown);
+    },
+    button(widget, index) {
+      const button = pu.el("button", { className: widget.color || "" }, widget.label);
+      button.addEventListener("click", () => send(index, "click").catch(fail));
+      return pu.el("div", { className: "actions" }, button);
+    },
+    hold(widget, index) {
+      const button = pu.el("button", { className: "hold " + (widget.color || "") }, "Hold");
+      let timer = null;
+      const release = () => {
+        if (timer !== null) {
+          clearInterval(timer);
+          timer = null;
+          send(index, "release").catch(fail);
+        }
+      };
+      button.addEventListener("pointerdown", (event) => {
+        event.preventDefault();
+        if (timer === null) {
+          send(index, "press").catch(fail);
+          // keep-alive: the device releases by itself if these stop arriving
+          timer = setInterval(() => send(index, "hold").catch(() => {}), 300);
+        }
+      });
+      ["pointerup", "pointerleave", "pointercancel"].forEach((name) => button.addEventListener(name, release));
+      button.addEventListener("contextmenu", (event) => event.preventDefault());
+      window.addEventListener("blur", release);
+      updaters[index] = (value) => button.classList.toggle("active", value === true);
+      return row(widget, button);
+    },
+    value(widget, index) {
+      const shown = pu.el("span", { className: "value" });
+      updaters[index] = (value) => { shown.textContent = value; };
+      return row(widget, shown);
+    },
+    indicator(widget, index) {
+      const dot = pu.el("span", { className: "dot" });
+      updaters[index] = (value) => { dot.className = "dot " + (value ? "on " + (widget.color || "") : ""); };
+      return row(widget, dot);
+    },
+  };
+
+  function showValues(values) {
+    values.forEach((value, index) => {
+      if (updaters[index] && value !== null) {
+        updaters[index](value);
+      }
+    });
+  }
+
+  pu.get("/api/pu/page?path=" + encodeURIComponent(path)).then((page) => {
+    document.title = page.title;
+    document.getElementById("title").textContent = page.title;
+    page.widgets.forEach((widget, index) => {
+      const build = builders[widget.kind];
+      if (build) {
+        card.append(build(widget, index));
+      }
+    });
+    showValues(page.values);
+    setInterval(() => {
+      pu.get("/api/pu/page/values?path=" + encodeURIComponent(path))
+        .then((result) => showValues(result.values)).catch(() => {});
+    }, 1000);
+  }).catch(fail);
+</script>
+</body>
+</html>
+)PUWEB";
+
+// web/settings.html
+static const char kWebSettingsHtml[] PROGMEM = R"PUWEB(<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Settings</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/pu/app.css">
+  <script src="/pu/app.js"></script>
+</head>
+<body>
+<h1>Settings</h1>
+<div class="content">
+  <form class="card" id="settingsForm">
+    <h2>General</h2>
+    <div class="row">
+      <label for="deviceName">Device name</label>
+      <div class="control"><input type="text" id="deviceName" name="deviceName" maxlength="32"></div>
+    </div>
+
+    <h2>WiFi</h2>
+    <div class="row">
+      <label for="ssid">Network name</label>
+      <div class="control"><input type="text" id="ssid" name="ssid" maxlength="32" autocapitalize="off"></div>
+    </div>
+    <div class="actions">
+      <button type="button" class="secondary" id="scan">Search for networks</button>
+    </div>
+    <ul class="list" id="networks"></ul>
+    <div class="row">
+      <label for="pass">Password</label>
+      <div class="control"><input type="password" id="pass" name="pass" maxlength="64" autocomplete="off"></div>
+    </div>
+    <div class="row">
+      <label for="clearPass">Open network (no password)</label>
+      <div class="control">
+        <label class="switch"><input type="checkbox" id="clearPass"><span class="slider"></span></label>
+      </div>
+    </div>
+    <div class="row">
+      <label for="ip">IP address</label>
+      <div class="control"><input type="text" id="ip" name="ip" placeholder="automatic (DHCP)"></div>
+    </div>
+    <div class="row">
+      <label for="gateway">Gateway</label>
+      <div class="control"><input type="text" id="gateway" name="gateway"></div>
+    </div>
+
+    <div class="actions"><input type="submit" value="Save and restart"></div>
+    <p class="muted" id="formMessage"></p>
+  </form>
+</div>
+
+<script>
+  const byId = (id) => document.getElementById(id);
+
+  pu.get("/api/pu/status").then((status) => {
+    byId("deviceName").value = status.deviceName;
+    byId("ssid").value = status.wifi.ssid;
+    byId("pass").placeholder = status.wifi.passwordSet ? "unchanged" : "";
+    byId("ip").value = status.wifi.localIP;
+    byId("gateway").value = status.wifi.gateway;
+  }).catch((error) => pu.toast(error.message, true));
+
+  byId("clearPass").addEventListener("change", (event) => {
+    byId("pass").disabled = event.target.checked;
+  });
+
+  // ---- network search ----
+  const bars = (rssi) => (rssi > -60 ? "strong" : rssi > -75 ? "medium" : "weak");
+
+  function showNetworks(networks) {
+    const list = byId("networks");
+    list.replaceChildren();
+    if (networks.length === 0) {
+      list.append(pu.el("li", null, "No networks found. Type the name above."));
+    }
+    networks.forEach((network) => {
+      const detail = bars(network.rssi) + (network.secure ? ", locked" : ", open");
+      list.append(pu.el("li", {
+        onclick: () => {
+          byId("ssid").value = network.ssid;
+          byId("clearPass").checked = !network.secure;
+          byId("pass").disabled = !network.secure;
+          if (network.secure) { byId("pass").focus(); }
+        },
+      }, pu.el("span", null, network.ssid), pu.el("span", { className: "muted" }, detail)));
+    });
+  }
+
+  function pollScan(button, attempts) {
+    pu.get("/api/pu/wifi/scan").then((scan) => {
+      if (scan.scanning && attempts > 0) {
+        setTimeout(() => pollScan(button, attempts - 1), 700);
+        return;
+      }
+      button.disabled = false;
+      button.textContent = "Search for networks";
+      showNetworks(scan.networks);
+    }).catch((error) => {
+      // while searching the device may be slow to answer; keep trying for a while
+      if (attempts > 0) {
+        setTimeout(() => pollScan(button, attempts - 1), 1000);
+        return;
+      }
+      button.disabled = false;
+      button.textContent = "Search for networks";
+      pu.toast(error.message, true);
+    });
+  }
+
+  byId("scan").addEventListener("click", (event) => {
+    const button = event.target;
+    button.disabled = true;
+    button.textContent = "Searching...";
+    pu.post("/api/pu/wifi/scan").then(() => setTimeout(() => pollScan(button, 20), 1000))
+      .catch((error) => { button.disabled = false; pu.toast(error.message, true); });
+  });
+
+  // ---- save ----
+  byId("settingsForm").addEventListener("submit", (event) => {
+    event.preventDefault();
+    const params = new FormData(event.target);
+    if (byId("clearPass").checked) {
+      params.set("clearPass", "true");
+    }
+    pu.post("/api/pu/settings", params)
+      .then((result) => { byId("formMessage").textContent = result.message; pu.waitForRestart(); })
+      .catch((error) => { byId("formMessage").textContent = "Saving failed: " + error.message; });
+  });
+</script>
+</body>
+</html>
+)PUWEB";
+
+// web/update.html
+static const char kWebUpdateHtml[] PROGMEM = R"PUWEB(<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Update</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/pu/app.css">
+  <script src="/pu/app.js"></script>
+</head>
+<body>
+<h1>Update</h1>
+<div class="content">
+  <div class="card">
+    <p id="firmwareInfo" class="muted"></p>
+
+    <h2>Upload a file</h2>
+    <div class="row">
+      <label for="file">File</label>
+      <div class="control"><input type="file" id="file" accept=".bin"></div>
+    </div>
+    <div class="row">
+      <label for="kind">Contents</label>
+      <div class="control">
+        <select id="kind">
+          <option value="firmware">Firmware</option>
+          <option value="filesystem">Filesystem image</option>
+        </select>
+      </div>
+    </div>
+    <div class="actions"><button id="upload">Upload and install</button></div>
+    <progress id="progress" value="0" max="100" hidden></progress>
+    <p id="uploadMessage" class="muted"></p>
+  </div>
+
+  <div class="card" id="githubCard" hidden>
+    <h2>Online updates</h2>
+    <div class="row">
+      <label for="autoUpdates">Install updates automatically at start</label>
+      <div class="control">
+        <label class="switch"><input type="checkbox" id="autoUpdates"><span class="slider"></span></label>
+      </div>
+    </div>
+    <div class="actions"><button id="checkForUpdates">Check for updates</button></div>
+    <div class="row">
+      <label for="specificFW">Install a specific version</label>
+      <div class="control">
+        <input type="text" id="specificFW" placeholder="v1.2.3" style="width: 7rem">
+        <button class="secondary" id="installSpecific">Install</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const byId = (id) => document.getElementById(id);
+  const fail = (error) => pu.toast(error.message, true);
+
+  // ---- file upload ----
+  byId("upload").addEventListener("click", () => {
+    const file = byId("file").files[0];
+    const message = byId("uploadMessage");
+    if (!file) {
+      message.textContent = "Choose a file first.";
+      return;
+    }
+    const button = byId("upload");
+    const progress = byId("progress");
+    const form = new FormData();
+    form.append("file", file, file.name);
+
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", "/api/pu/update/upload?type=" + byId("kind").value + "&size=" + file.size);
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable) {
+        progress.value = Math.round(100 * event.loaded / event.total);
+        message.textContent = "Uploading: " + progress.value + " %";
+      }
+    };
+    const done = (text) => { button.disabled = false; message.textContent = text; };
+    xhr.onerror = () => done("Upload failed: connection lost.");
+    xhr.onload = () => {
+      let result = {};
+      try { result = JSON.parse(xhr.responseText); } catch (error) { /* not JSON */ }
+      if (xhr.status === 200) {
+        done("Installed. The device restarts now.");
+        pu.waitForRestart();
+      } else {
+        done("Upload failed: " + (result.message || "HTTP " + xhr.status));
+      }
+    };
+    button.disabled = true;
+    progress.hidden = false;
+    progress.value = 0;
+    xhr.send(form);
+  });
+
+  // ---- online updates (GitHub releases) ----
+  const updateButton = byId("checkForUpdates");
+  let latestVersion = "";
+  let updateAvailable = false;
+  let pollTimer = null;
+
+  function setButton(text, color) {
+    updateButton.className = color || "";
+    updateButton.textContent = text;
+  }
+
+  function showUpdate(update) {
+    latestVersion = update.latest;
+    updateAvailable = update.state === "available";
+    const busy = update.state === "checking" || update.state === "installing";
+    const labels = {
+      checking: ["Checking...", ""],
+      installing: ["Installing...", "orange"],
+      installed: ["Installed, restarting...", "green"],
+      available: [update.latest + " - install now", "orange"],
+      upToDate: ["Already on the latest version", "green"],
+      failed: ["Error: " + update.message, "red"],
+    };
+    const label = labels[update.state] || ["Check for updates", ""];
+    setButton(label[0], label[1]);
+    if (update.state === "installed") {
+      pu.waitForRestart();
+    }
+    if (!busy && pollTimer !== null) {
+      clearInterval(pollTimer);
+      pollTimer = null;
+    }
+  }
+
+  // Checks and installs run in the background on the device, so poll until they are done.
+  function pollUpdate() {
+    if (pollTimer === null) {
+      pollTimer = setInterval(() => {
+        pu.get("/api/pu/status").then((status) => showUpdate(status.update)).catch(() => {});
+      }, 1000);
+    }
+  }
+
+  pu.get("/api/pu/status").then((status) => {
+    byId("firmwareInfo").textContent = "Installed firmware: " + status.firmware;
+    byId("githubCard").hidden = !status.update.configured;
+    byId("autoUpdates").checked = status.autoUpdates;
+    showUpdate(status.update);
+    if (status.update.state === "checking" || status.update.state === "installing") {
+      pollUpdate();
+    }
+  }).catch(fail);
+
+  byId("autoUpdates").addEventListener("change", (event) => {
+    const box = event.target;
+    pu.post("/api/pu/autoupdates", { enabled: box.checked })
+      .catch((error) => { box.checked = !box.checked; fail(error); });
+  });
+
+  updateButton.addEventListener("click", () => {
+    if (updateAvailable) {
+      setButton("Installing " + latestVersion + "...", "orange");
+      pu.post("/api/pu/update/install").then(pollUpdate).catch(fail);
+    } else {
+      setButton("Checking...", "");
+      pu.post("/api/pu/update/check").then(pollUpdate).catch(fail);
+    }
+  });
+
+  byId("installSpecific").addEventListener("click", () => {
+    const version = byId("specificFW").value.trim();
+    if (version !== "") {
+      setButton("Installing " + version + "...", "orange");
+      pu.post("/api/pu/update/install", { version: version }).then(pollUpdate).catch(fail);
+    }
+  });
+</script>
+</body>
+</html>
 )PUWEB";
 
 } // namespace pu

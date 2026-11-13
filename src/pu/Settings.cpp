@@ -175,6 +175,16 @@ bool Settings::contains(const char* key) const {
     return find(key) != nullptr;
 }
 
+bool Settings::typeOf(const char* key, Type& type) const {
+    Lock lock(mutex_);
+    const Entry* entry = find(key);
+    if (entry == nullptr) {
+        return false;
+    }
+    type = entry->type;
+    return true;
+}
+
 int32_t Settings::getInt(const char* key, int32_t fallback) const {
     Lock lock(mutex_);
     const Entry* entry = findTyped(key, Type::Int);

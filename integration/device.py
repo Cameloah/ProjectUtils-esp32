@@ -4,18 +4,12 @@ from __future__ import annotations
 
 import base64
 import re
-import struct
 import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 
 import requests
 from websockets.sync.client import ClientConnection, connect
-
-# WebSerial wire format: magic, packet type, then type-specific fields.
-_MAGIC = b"\xab\xcd"
-_TYPE_MESSAGE = 0x02
-_ROW_HEADER_SIZE = 12  # magic, type and reserved bytes in front of the 2-byte row length
 
 _BOOT_NUMBER = re.compile(r"Boot number (\d+)")
 
@@ -32,15 +26,21 @@ class Device:
         kwargs.setdefault("timeout", 5)
         return requests.get(self.base + path, auth=self.auth if auth else None, **kwargs)
 
-    def post(self, path: str, data: dict | None = None, *, auth: bool = True) -> requests.Response:
+    def post(
+        self, path: str, data: dict | None = None, *, auth: bool = True, **kwargs
+    ) -> requests.Response:
+        kwargs.setdefault("timeout", 5)
         return requests.post(
-            self.base + path, data=data or {}, auth=self.auth if auth else None, timeout=5
+            self.base + path, data=data or {}, auth=self.auth if auth else None, **kwargs
         )
 
-    def status(self) -> dict:
-        response = self.get("/api/pu/status")
+    def json(self, path: str) -> dict:
+        response = self.get(path)
         response.raise_for_status()
         return response.json()
+
+    def status(self) -> dict:
+        return self.json("/api/pu/status")
 
     def log_lines(self) -> list[str]:
         response = self.get("/api/pu/log")
@@ -68,58 +68,82 @@ class Device:
         raise AssertionError(f"device did not come back within {timeout:.0f} s after a restart")
 
     @contextmanager
-    def web_console(self) -> Iterator[WebConsole]:
+    def web_console(self, *, token: str | None = None, auth: bool = True) -> Iterator[WebConsole]:
+        """Opens the console websocket, logging in with the admin password or a token."""
         headers = {}
-        if self.auth:
-            token = base64.b64encode(":".join(self.auth).encode()).decode()
-            headers["Authorization"] = f"Basic {token}"
-        with connect(f"ws://{self.host}/wserial", additional_headers=headers) as socket:
+        if self.auth and auth:
+            credentials = base64.b64encode(":".join(self.auth).encode()).decode()
+            headers["Authorization"] = f"Basic {credentials}"
+        url = f"ws://{self.host}/api/pu/console/ws" + (f"?token={token}" if token else "")
+        with connect(url, additional_headers=headers) as socket:
             yield WebConsole(socket)
 
 
+class HomePage:
+    """The example's home page, addressed by widget label the way a user would."""
+
+    def __init__(self, device: Device, path: str = "/") -> None:
+        self.device = device
+        self.path = path
+        self.layout = device.json(f"/api/pu/page?path={path}")
+        self.labels = [widget["label"] for widget in self.layout["widgets"]]
+
+    def index(self, label: str, kind: str | None = None) -> int:
+        for index, widget in enumerate(self.layout["widgets"]):
+            if widget["label"] == label and kind in (None, widget["kind"]):
+                return index
+        raise AssertionError(f"no widget {label!r} on the page")
+
+    def value(self, label: str, kind: str | None = None):
+        values = self.device.json(f"/api/pu/page/values?path={self.path}")["values"]
+        return values[self.index(label, kind)]
+
+    def act(self, label: str, action: str, value=None, kind: str | None = None):
+        data = {"path": self.path, "widget": self.index(label, kind), "action": action}
+        if value is not None:
+            data["value"] = value
+        return self.device.post("/api/pu/page/widget", data)
+
+    def wait_for(self, label: str, expected, timeout: float = 3, kind: str | None = None):
+        """Waits until the widget shows `expected`; returns the last value seen."""
+        deadline = time.monotonic() + timeout
+        while True:
+            current = self.value(label, kind)
+            if current == expected or time.monotonic() > deadline:
+                return current
+            time.sleep(0.1)
+
+
 class WebConsole:
-    """The web console's websocket, speaking the same protocol as the browser page."""
+    """The web console's websocket: text messages, one or more lines each."""
 
     def __init__(self, socket: ClientConnection) -> None:
         self._socket = socket
 
-    def send(self, text: str | bytes) -> None:
-        data = text.encode() if isinstance(text, str) else text
-        self._socket.send(_MAGIC + bytes([_TYPE_MESSAGE]) + struct.pack("<H", len(data)) + data)
+    def send(self, text: str) -> None:
+        self._socket.send(text)
 
-    def rows(self, count: int, timeout: float = 3) -> list[str]:
-        """Collects output rows until `count` have arrived or `timeout` seconds have passed."""
-        rows: list[str] = []
+    def lines(self, count: int, timeout: float = 3) -> list[str]:
+        """Collects output lines until `count` have arrived or `timeout` seconds have passed."""
+        lines: list[str] = []
         deadline = time.monotonic() + timeout
-        while len(rows) < count:
+        while len(lines) < count:
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 break
             try:
-                frame = self._socket.recv(timeout=remaining)
+                message = self._socket.recv(timeout=remaining)
             except TimeoutError:
                 break
-            if isinstance(frame, bytes):
-                rows.extend(_parse_rows(frame))
-        return rows
+            if isinstance(message, str):
+                lines.extend(message.split("\n"))
+        return lines
 
     def drain(self, quiet: float = 0.5) -> list[str]:
-        """Collects rows until nothing has arrived for `quiet` seconds."""
-        rows: list[str] = []
+        """Collects lines until nothing has arrived for `quiet` seconds."""
+        lines: list[str] = []
         while True:
-            batch = self.rows(1, timeout=quiet)
+            batch = self.lines(1, timeout=quiet)
             if not batch:
-                return rows
-            rows.extend(batch)
-
-
-def _parse_rows(frame: bytes) -> list[str]:
-    rows = []
-    offset = 0
-    header = _ROW_HEADER_SIZE + 2
-    while offset + header <= len(frame) and frame[offset : offset + 2] == _MAGIC:
-        (length,) = struct.unpack_from("<H", frame, offset + _ROW_HEADER_SIZE)
-        start = offset + header
-        rows.append(frame[start : start + length].decode(errors="replace"))
-        offset = start + length
-    return rows
+                return lines
+            lines.extend(batch)

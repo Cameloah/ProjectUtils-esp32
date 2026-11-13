@@ -50,7 +50,7 @@ void ProjectUtilsClass::begin(const Config& config) {
     if (config_.enableOta) {
         ota_.begin(wifi_.hostname(), config_.adminPassword, log_);
     }
-    web_.begin(config_, settings_, wifi_, updater_, log_, console_);
+    web_.begin(config_, settings_, wifi_, updater_, log_, console_, clock_);
 }
 
 void ProjectUtilsClass::loop() {

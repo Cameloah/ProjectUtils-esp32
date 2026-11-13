@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Device</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/pu/app.css">
+  <script src="/pu/app.js"></script>
+</head>
+<body>
+<h1 id="title"></h1>
+<div class="content">
+  <div class="card" id="card"></div>
+</div>
+
+<script>
+  // Renders a page that the project declared in C++ (pu::Page). Layout and values come from
+  // /api/pu/page; every control reports back through /api/pu/page/widget.
+  const path = location.pathname;
+  const card = document.getElementById("card");
+  const updaters = []; // per widget: function(value) that shows a value coming from the device
+  const fail = (error) => pu.toast(error.message, true);
+
+  function send(index, action, value) {
+    const params = { path: path, widget: index, action: action };
+    if (value !== undefined) {
+      params.value = value;
+    }
+    return pu.post("/api/pu/page/widget", params);
+  }
+
+  function row(widget, ...controls) {
+    const control = pu.el("div", { className: "control" }, ...controls);
+    if (widget.unit) {
+      control.append(pu.el("span", { className: "unit" }, widget.unit));
+    }
+    return pu.el("div", { className: "row" }, pu.el("span", { className: "label" }, widget.label), control);
+  }
+
+  // Saves an input when it changes and flashes its border as feedback.
+  function bindInput(input, index, read) {
+    input.addEventListener("change", () => {
+      send(index, "set", read()).then(() => {
+        input.classList.remove("invalid");
+        input.classList.add("saved");
+        setTimeout(() => input.classList.remove("saved"), 1200);
+      }).catch((error) => { input.classList.add("invalid"); fail(error); });
+    });
+  }
+
+  function range(input, widget) {
+    ["min", "max", "step"].forEach((name) => {
+      if (widget[name] !== undefined) {
+        input[name] = widget[name];
+      }
+    });
+  }
+
+  const builders = {
+    section(widget) {
+      return pu.el("h2", null, widget.label);
+    },
+    number(widget, index) {
+      const input = pu.el("input", { type: "number", step: "any" });
+      range(input, widget);
+      bindInput(input, index, () => input.value);
+      updaters[index] = (value) => { if (document.activeElement !== input) { input.value = value; } };
+      return row(widget, input);
+    },
+    text(widget, index) {
+      const input = pu.el("input", { type: "text", maxLength: 200 });
+      bindInput(input, index, () => input.value);
+      updaters[index] = (value) => { if (document.activeElement !== input) { input.value = value; } };
+      return row(widget, input);
+    },
+    select(widget, index) {
+      const input = pu.el("select", null, ...widget.options.map((option) => pu.el("option", null, option)));
+      bindInput(input, index, () => input.value);
+      updaters[index] = (value) => { if (document.activeElement !== input) { input.value = value; } };
+      return row(widget, input);
+    },
+    toggle(widget, index) {
+      const input = pu.el("input", { type: "checkbox" });
+      input.addEventListener("change", () => {
+        send(index, "set", input.checked).catch((error) => { input.checked = !input.checked; fail(error); });
+      });
+      updaters[index] = (value) => { input.checked = value; };
+      return row(widget, pu.el("label", { className: "switch" }, input, pu.el("span", { className: "slider" })));
+    },
+    slider(widget, index) {
+      const input = pu.el("input", { type: "range" });
+      range(input, widget);
+      const shown = pu.el("span", { className: "value" });
+      let dragging = false;
+      let lastSent = 0;
+      input.addEventListener("input", () => {
+        dragging = true;
+        shown.textContent = input.value;
+        if (Date.now() - lastSent > 150) { // live feedback while dragging, without flooding
+          lastSent = Date.now();
+          send(index, "set", input.value).catch(() => {});
+        }
+      });
+      input.addEventListener("change", () => {
+        dragging = false;
+        send(index, "set", input.value).catch(fail);
+      });
+      updaters[index] = (value) => {
+        if (!dragging) { input.value = value; shown.textContent = input.value; }
+      };
+      return row(widget, input, shown);
+    },
+    button(widget, index) {
+      const button = pu.el("button", { className: widget.color || "" }, widget.label);
+      button.addEventListener("click", () => send(index, "click").catch(fail));
+      return pu.el("div", { className: "actions" }, button);
+    },
+    hold(widget, index) {
+      const button = pu.el("button", { className: "hold " + (widget.color || "") }, "Hold");
+      let timer = null;
+      const release = () => {
+        if (timer !== null) {
+          clearInterval(timer);
+          timer = null;
+          send(index, "release").catch(fail);
+        }
+      };
+      button.addEventListener("pointerdown", (event) => {
+        event.preventDefault();
+        if (timer === null) {
+          send(index, "press").catch(fail);
+          // keep-alive: the device releases by itself if these stop arriving
+          timer = setInterval(() => send(index, "hold").catch(() => {}), 300);
+        }
+      });
+      ["pointerup", "pointerleave", "pointercancel"].forEach((name) => button.addEventListener(name, release));
+      button.addEventListener("contextmenu", (event) => event.preventDefault());
+      window.addEventListener("blur", release);
+      updaters[index] = (value) => button.classList.toggle("active", value === true);
+      return row(widget, button);
+    },
+    value(widget, index) {
+      const shown = pu.el("span", { className: "value" });
+      updaters[index] = (value) => { shown.textContent = value; };
+      return row(widget, shown);
+    },
+    indicator(widget, index) {
+      const dot = pu.el("span", { className: "dot" });
+      updaters[index] = (value) => { dot.className = "dot " + (value ? "on " + (widget.color || "") : ""); };
+      return row(widget, dot);
+    },
+  };
+
+  function showValues(values) {
+    values.forEach((value, index) => {
+      if (updaters[index] && value !== null) {
+        updaters[index](value);
+      }
+    });
+  }
+
+  pu.get("/api/pu/page?path=" + encodeURIComponent(path)).then((page) => {
+    document.title = page.title;
+    document.getElementById("title").textContent = page.title;
+    page.widgets.forEach((widget, index) => {
+      const build = builders[widget.kind];
+      if (build) {
+        card.append(build(widget, index));
+      }
+    });
+    showValues(page.values);
+    setInterval(() => {
+      pu.get("/api/pu/page/values?path=" + encodeURIComponent(path))
+        .then((result) => showValues(result.values)).catch(() => {});
+    }, 1000);
+  }).catch(fail);
+</script>
+</body>
+</html>

@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Console</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/pu/app.css">
+  <script src="/pu/app.js"></script>
+</head>
+<body>
+<h1>Console</h1>
+<div class="content">
+  <div class="card" style="max-width: 900px">
+    <div class="terminal" id="output"></div>
+    <form class="row" id="sendForm">
+      <input type="text" id="command" placeholder="Type a command" autocomplete="off"
+             autocapitalize="off" spellcheck="false" style="flex: 1 1 12rem; width: auto">
+      <input type="submit" value="Send">
+    </form>
+    <div class="actions">
+      <label><input type="checkbox" id="timestamps" checked> Timestamps</label>
+      <label><input type="checkbox" id="follow" checked> Follow output</label>
+      <button class="secondary" id="clear">Clear</button>
+      <button class="secondary" id="download">Download</button>
+    </div>
+    <p class="muted" id="state">Connecting...</p>
+  </div>
+</div>
+
+<script>
+  const byId = (id) => document.getElementById(id);
+  const output = byId("output");
+  const maxLines = 2000;
+  const history = [];
+  let historyIndex = 0;
+  let socket = null;
+
+  function addLine(text, className) {
+    const time = new Date().toTimeString().substring(0, 8);
+    const line = pu.el("div", { className: className || "" },
+      pu.el("span", { className: "time", hidden: !byId("timestamps").checked }, time + " "), text);
+    output.append(line);
+    while (output.childElementCount > maxLines) {
+      output.firstElementChild.remove();
+    }
+    if (byId("follow").checked) {
+      output.scrollTop = output.scrollHeight;
+    }
+  }
+
+  function connect() {
+    const retry = () => {
+      byId("state").textContent = "Disconnected, trying again...";
+      setTimeout(connect, 2000);
+    };
+    // The token stands in for the login, which browsers do not send along with a websocket.
+    pu.get("/api/pu/console/token").then((result) => {
+      const scheme = location.protocol === "https:" ? "wss://" : "ws://";
+      socket = new WebSocket(scheme + location.host + "/api/pu/console/ws?token=" + result.token);
+      socket.onopen = () => { byId("state").textContent = "Connected"; };
+      socket.onmessage = (event) => {
+        // one message holds one or more lines
+        String(event.data).split("\n").forEach((line) => addLine(line));
+      };
+      socket.onclose = retry;
+    }).catch(retry);
+  }
+  connect();
+
+  byId("sendForm").addEventListener("submit", (event) => {
+    event.preventDefault();
+    const input = byId("command");
+    if (socket && socket.readyState === WebSocket.OPEN) {
+      socket.send(input.value);
+      addLine("> " + input.value, "sent");
+      if (input.value !== "" && history[history.length - 1] !== input.value) {
+        history.push(input.value);
+      }
+      historyIndex = history.length;
+      input.value = "";
+    } else {
+      pu.toast("Not connected", true);
+    }
+  });
+
+  byId("command").addEventListener("keydown", (event) => {
+    if (event.key !== "ArrowUp" && event.key !== "ArrowDown") {
+      return;
+    }
+    event.preventDefault();
+    historyIndex = Math.max(0, Math.min(history.length, historyIndex + (event.key === "ArrowUp" ? -1 : 1)));
+    event.target.value = history[historyIndex] || "";
+  });
+
+  byId("timestamps").addEventListener("change", (event) => {
+    output.querySelectorAll(".time").forEach((span) => { span.hidden = !event.target.checked; });
+  });
+  byId("clear").addEventListener("click", () => output.replaceChildren());
+  byId("download").addEventListener("click", () => {
+    const text = Array.from(output.children).map((line) => line.textContent).join("\n") + "\n";
+    const link = pu.el("a", {
+      href: URL.createObjectURL(new Blob([text], { type: "text/plain" })),
+      download: "console-" + new Date().toISOString().substring(0, 19).replace(/:/g, "-") + ".txt",
+    });
+    link.click();
+    URL.revokeObjectURL(link.href);
+  });
+</script>
+</body>
+</html>

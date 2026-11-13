@@ -7,16 +7,20 @@ Exits with status 1 if the header had to be rewritten, so stale output fails the
 
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 OUTPUT = ROOT / "src" / "pu" / "web_assets.gen.h"
-ASSETS = {
-    "kSettingsHtml": ROOT / "web" / "settings.html",
-    "kStyleCss": ROOT / "web" / "style.css",
-}
+WEB = ROOT / "web"
 DELIMITER = "PUWEB"
+
+
+def constant_name(filename: str) -> str:
+    """settings.html -> kWebSettingsHtml"""
+    words = re.split(r"[^A-Za-z0-9]+", filename)
+    return "kWeb" + "".join(word[:1].upper() + word[1:] for word in words if word)
 
 
 def render() -> str:
@@ -30,7 +34,10 @@ def render() -> str:
         "namespace pu {",
         "",
     ]
-    for name, path in ASSETS.items():
+    for path in sorted(WEB.iterdir()):
+        if not path.is_file():
+            continue
+        name = constant_name(path.name)
         text = path.read_text(encoding="utf-8").replace("\r\n", "\n")
         if f"){DELIMITER}" in text:
             raise ValueError(f"{path} contains the raw string delimiter ){DELIMITER}")

@@ -3,30 +3,47 @@
 #include <Arduino.h>
 #include <ESPAsyncWebServer.h>
 #include <atomic>
+#include <deque>
 #include <mutex>
+#include <vector>
 
 #include "Config.h"
 #include "LineQueue.h"
+#include "Page.h"
 
 namespace pu {
 
+class Clock;
 class Console;
 class GithubUpdater;
 class RamLog;
 class Settings;
 class WifiManager;
 
-/// Web server with the settings page, its JSON API and (optionally) the web console.
+/// Web server with the built-in pages (settings, update, console, device info), their JSON
+/// API, and the project's own pages. All pages share one menu and one stylesheet.
 ///
 /// Request handlers run on the network task and therefore never block: anything slow (update
 /// check, flashing, restart) is only requested there and carried out by loop().
 class WebUi {
   public:
     void begin(const Config& config, Settings& settings, WifiManager& wifi, GithubUpdater& updater,
-               RamLog& log, Console& console);
+               RamLog& log, Console& console, Clock& clock);
 
     /// Must be called regularly from loop().
     void loop();
+
+    // --- the project's own pages; call from setup() ---
+
+    /// The project's start page at "/", declared in C++. Without one, "/" shows the device info.
+    Page& home(const char* title) { return page("/", title); }
+    /// A further page declared in C++, listed in the menu under `title`.
+    Page& page(const char* path, const char* title);
+    /// A page written by hand. `html` must stay valid forever (a string literal). Include
+    /// /pu/app.css and /pu/app.js in it to get the shared style and the menu.
+    void addPage(const char* path, const char* title, const char* html);
+    /// A menu entry for a route the project serves itself through server().
+    void addMenuLink(const char* title, const char* path);
 
     /// The underlying server, for registering the project's own routes.
     AsyncWebServer& server() { return server_; }
@@ -39,13 +56,33 @@ class WebUi {
     bool authorize(AsyncWebServerRequest* request) const;
 
   private:
+    struct MenuEntry {
+        String path;
+        String title;
+    };
+
     void registerRoutes();
-    void beginWebSerial(Console& console);
-    void pumpWebSerial();
+    void registerPageApi();
+    void serveAsset(const char* path, const char* contentType, const char* data, size_t length,
+                    bool isProtected);
+    Page* findPage(AsyncWebServerRequest* request, bool post);
+    bool hasCredentials(AsyncWebServerRequest* request) const;
+
+    void beginConsole(Console& console);
+    void pumpConsole();
+    void onConsoleEvent(AsyncWebSocketClient* client, AwsEventType type, void* arg, uint8_t* data,
+                        size_t length);
+
+    void handleNav(AsyncWebServerRequest* request) const;
     void handleStatus(AsyncWebServerRequest* request) const;
+    void handleInfo(AsyncWebServerRequest* request) const;
     void handleSettingsPost(AsyncWebServerRequest* request);
     void handleAutoUpdatesPost(AsyncWebServerRequest* request);
     void handleInstallPost(AsyncWebServerRequest* request);
+    void handleScanGet(AsyncWebServerRequest* request) const;
+    void handleUploadChunk(AsyncWebServerRequest* request, size_t index, const uint8_t* data,
+                           size_t length, bool final);
+    void handleUploadDone(AsyncWebServerRequest* request);
 
     AsyncWebServer server_{80};
     const Config* config_ = nullptr;
@@ -53,6 +90,12 @@ class WebUi {
     WifiManager* wifi_ = nullptr;
     GithubUpdater* updater_ = nullptr;
     RamLog* log_ = nullptr;
+    Console* console_ = nullptr;
+    Clock* clock_ = nullptr;
+
+    std::deque<Page> pages_; // deque: references handed out by page() stay valid
+    std::vector<MenuEntry> menu_;
+    uint32_t sketchSize_ = 0;
 
     std::atomic<bool> checkRequested_{false};
     std::atomic<bool> installRequested_{false};
@@ -61,12 +104,19 @@ class WebUi {
     std::mutex installMutex_;
     String installTag_;
 
-    // Console output waiting for the web console. Filled from any task, drained by loop(), so
-    // the WebSerial library itself is only ever touched from one task.
-    static const size_t kWebConsoleQueueSize = 4096;
-    std::mutex webConsoleMutex_;
-    LineQueue<kWebConsoleQueueSize> webConsoleOut_;
-    uint32_t webConsoleLastWriteUs_ = 0;
+    // File upload from the update page. One upload at a time.
+    bool uploadStarted_ = false;
+    String uploadError_;
+
+    // Web console. Output is queued from any task and sent by loop(), so the socket is only
+    // written from one task. The scrollback is what a newly opened console page gets to see.
+    static const size_t kConsoleQueueSize = 4096;
+    AsyncWebSocket consoleSocket_{"/api/pu/console/ws"};
+    String consoleToken_;
+    std::mutex consoleMutex_;
+    LineQueue<kConsoleQueueSize> consoleOut_;
+    String consoleScrollback_;
+    uint32_t consoleLastCleanupMs_ = 0;
 };
 
 } // namespace pu

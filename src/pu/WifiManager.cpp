@@ -113,7 +113,7 @@ bool WifiManager::connect() {
 
 void WifiManager::startPortal() {
     // Keep the station interface alive when credentials exist so the connection can recover.
-    WiFi.mode(hasCredentials() ? WIFI_AP_STA : WIFI_AP);
+    WiFi.mode(WIFI_AP_STA); // station side stays on so the settings page can search for networks
     const char* password = config_->apPassword.isEmpty() ? nullptr : config_->apPassword.c_str();
     if (!WiFi.softAP(deviceName_.c_str(), password)) {
         log_->error("Access point '%s' could not be started", deviceName_.c_str());

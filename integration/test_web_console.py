@@ -1,31 +1,38 @@
-"""Web console at /webserial: input reaches the sketch, output reaches the browser."""
+"""Web console at /console: input reaches the sketch, output reaches the browser."""
 
 from __future__ import annotations
 
+import pytest
+from websockets.exceptions import InvalidStatus
+
 
 def test_console_page_is_served(device):
-    response = device.get("/webserial")
+    response = device.get("/console")
     assert response.status_code == 200
     assert "html" in response.headers["Content-Type"]
+
+
+def test_old_console_address_redirects(device):
+    response = device.get("/webserial", allow_redirects=False)
+    assert response.status_code == 302
+    assert response.headers["Location"] == "/console"
 
 
 def test_reply_arrives_without_further_input(console):
     # Regression: output used to stay buffered on the device until the next message came in.
     console.send("hello")
-    assert console.rows(1, timeout=2) == ["You said: hello"]
+    assert console.lines(1, timeout=2) == ["You said: hello"]
 
 
-def test_each_line_is_one_row_without_line_breaks(console):
+def test_each_line_arrives_once_without_line_breaks(console):
     console.send("first")
     console.send("second")
-    rows = console.drain()
-    assert rows == ["You said: first", "You said: second"]
+    assert console.drain() == ["You said: first", "You said: second"]
 
 
-def test_browser_style_terminators_are_stripped_from_input(console):
-    # The stock web console page sends the text NUL-terminated.
-    console.send(b"padded\x00")
-    console.send(b"newline\r\n")
+def test_line_terminators_are_stripped_from_input(console):
+    console.send("padded\x00")
+    console.send("newline\r\n")
     assert console.drain() == ["You said: padded", "You said: newline"]
 
 
@@ -46,8 +53,15 @@ def test_two_consoles_both_receive_output(device, console):
     with device.web_console() as second:
         second.drain(quiet=0.3)
         console.send("shared")
-        assert console.rows(1, timeout=2) == ["You said: shared"]
-        assert second.rows(1, timeout=2) == ["You said: shared"]
+        assert console.lines(1, timeout=2) == ["You said: shared"]
+        assert second.lines(1, timeout=2) == ["You said: shared"]
+
+
+def test_newly_opened_console_shows_recent_output(device, console):
+    console.send("remember me")
+    assert console.lines(1, timeout=2) == ["You said: remember me"]
+    with device.web_console() as late:
+        assert "You said: remember me" in late.drain(quiet=0.5)
 
 
 def test_http_api_stays_responsive_during_console_traffic(device, console):
@@ -55,3 +69,19 @@ def test_http_api_stays_responsive_during_console_traffic(device, console):
         console.send(f"busy{index}")
         assert device.get("/api/pu/status").status_code == 200
     assert len(console.drain(quiet=1.0)) == 10
+
+
+def test_console_accepts_the_token_from_the_api_instead_of_a_login(device):
+    token = device.json("/api/pu/console/token")["token"]
+    with device.web_console(token=token, auth=False) as console:
+        console.drain(quiet=0.3)
+        console.send("token")
+        assert console.lines(1, timeout=2) == ["You said: token"]
+
+
+def test_console_refuses_connections_without_login_or_token(device):
+    if not device.auth:
+        pytest.skip("device has no admin password; build with one and pass --admin-password")
+    for token in (None, "0000000000000000"):
+        with pytest.raises(InvalidStatus), device.web_console(token=token, auth=False):
+            pass

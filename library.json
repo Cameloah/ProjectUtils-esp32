@@ -2,7 +2,7 @@
   "name": "ProjectUtils-esp32",
   "version": "2.0.0",
   "description": "ESP32 project starter: WiFi setup with captive portal, settings page, persistent typed settings, web serial console, RAM log, NTP time, ArduinoOTA and firmware updates from GitHub releases.",
-  "keywords": "esp32, wifi, captive portal, ota, nvs, settings, webserial, logging",
+  "keywords": "esp32, wifi, captive portal, ota, nvs, settings, web console, dashboard, logging",
   "repository": {
     "type": "git",
     "url": "https://github.com/Cameloah/ProjectUtils-esp32.git"
@@ -14,7 +14,6 @@
   "dependencies": [
     { "owner": "esp32async", "name": "ESPAsyncWebServer", "version": "^3.7.0" },
     { "owner": "esp32async", "name": "AsyncTCP", "version": "^3.3.2" },
-    { "owner": "ayushsharma82", "name": "WebSerial", "version": "^2.1.1" },
     { "owner": "bblanchon", "name": "ArduinoJson", "version": "^7.2.0" }
   ],
   "export": {

@@ -8,6 +8,7 @@
 #include "pu/Console.h"
 #include "pu/GithubUpdater.h"
 #include "pu/OtaService.h"
+#include "pu/Page.h"
 #include "pu/RamLog.h"
 #include "pu/Semver.h"
 #include "pu/Settings.h"

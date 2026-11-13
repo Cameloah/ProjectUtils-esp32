@@ -6,14 +6,18 @@
 #include <string>
 
 #include "pu/ByteQueue.h"
+#include "pu/HoldState.h"
 #include "pu/Hostname.h"
 #include "pu/LineQueue.h"
+#include "pu/Numbers.h"
 #include "pu/RingLog.h"
 #include "pu/Semver.h"
 
 using pu::ByteQueue;
+using pu::HoldState;
 using pu::LineQueue;
 using pu::LogLevel;
+using pu::NumberRange;
 using pu::RingLog;
 using pu::Semver;
 
@@ -197,6 +201,76 @@ static void testLineQueueDropsNulAndSplitsLongLines() {
     TEST_ASSERT_EQUAL_UINT(0, queue.size());
 }
 
+// ---------- Numbers ----------
+
+static void testParseNumberAcceptsOnlyCompleteFiniteNumbers() {
+    double value = 7.0;
+    TEST_ASSERT_TRUE(pu::parseNumber("12", value));
+    TEST_ASSERT_EQUAL_DOUBLE(12.0, value);
+    TEST_ASSERT_TRUE(pu::parseNumber("-0.5", value));
+    TEST_ASSERT_EQUAL_DOUBLE(-0.5, value);
+    TEST_ASSERT_TRUE(pu::parseNumber("1e3", value));
+    TEST_ASSERT_EQUAL_DOUBLE(1000.0, value);
+
+    value = 7.0;
+    const char* bad[] = {"", " 1", "1 ", "abc", "1,5", "1.5x", "nan", "inf", "1e999", "--1"};
+    for (const char* text : bad) {
+        TEST_ASSERT_FALSE_MESSAGE(pu::parseNumber(text, value), text);
+    }
+    TEST_ASSERT_FALSE(pu::parseNumber(nullptr, value));
+    TEST_ASSERT_EQUAL_DOUBLE(7.0, value); // a failed parse leaves the output untouched
+}
+
+static void testWholeNumberAndRange() {
+    TEST_ASSERT_TRUE(pu::isWholeNumber(0.0));
+    TEST_ASSERT_TRUE(pu::isWholeNumber(-3.0));
+    TEST_ASSERT_TRUE(pu::isWholeNumber(2147483647.0));
+    TEST_ASSERT_FALSE(pu::isWholeNumber(0.5));
+    TEST_ASSERT_FALSE(pu::isWholeNumber(2147483648.0)); // does not fit an int
+
+    NumberRange range;
+    TEST_ASSERT_TRUE(range.contains(-1e9)); // no bounds set
+    range.hasMin = true;
+    range.min = 0.1;
+    TEST_ASSERT_TRUE(range.contains(0.1));
+    TEST_ASSERT_FALSE(range.contains(0.0));
+    TEST_ASSERT_TRUE(range.contains(1e9));
+    range.hasMax = true;
+    range.max = 60.0;
+    TEST_ASSERT_TRUE(range.contains(60.0));
+    TEST_ASSERT_FALSE(range.contains(60.5));
+}
+
+// ---------- HoldState ----------
+
+static void testHoldStateReportsEdgesOnly() {
+    HoldState hold;
+    TEST_ASSERT_FALSE(hold.release());  // nothing held yet
+    TEST_ASSERT_TRUE(hold.touch(100));  // press starts a hold
+    TEST_ASSERT_FALSE(hold.touch(400)); // keep-alives do not start another one
+    TEST_ASSERT_TRUE(hold.held());
+    TEST_ASSERT_TRUE(hold.release());
+    TEST_ASSERT_FALSE(hold.release());
+    TEST_ASSERT_FALSE(hold.held());
+}
+
+static void testHoldStateExpiresWithoutKeepAlive() {
+    HoldState hold;
+    TEST_ASSERT_FALSE(hold.expire(5000, 1000)); // not held: nothing to expire
+    hold.touch(1000);
+    TEST_ASSERT_FALSE(hold.expire(1999, 1000));
+    hold.touch(1900); // keep-alive pushes the deadline out
+    TEST_ASSERT_FALSE(hold.expire(2899, 1000));
+    TEST_ASSERT_TRUE(hold.expire(2900, 1000));
+    TEST_ASSERT_FALSE(hold.held());
+    TEST_ASSERT_FALSE(hold.expire(9999, 1000)); // reported once
+
+    // across the rollover of the 32-bit millisecond counter
+    hold.touch(0xFFFFFF00U);
+    TEST_ASSERT_FALSE(hold.expire(0x00000010U, 1000)); // 272 ms later
+    TEST_ASSERT_TRUE(hold.expire(0x00000300U, 1000));  // 1024 ms later
+}
+
 int main() {
     UNITY_BEGIN();
     RUN_TEST(testSemverParsesWithAndWithoutPrefix);
@@ -211,5 +285,9 @@ int main() {
     RUN_TEST(testByteQueueDropsOverflowAndWraps);
     RUN_TEST(testLineQueueReturnsWholeLinesOnly);
     RUN_TEST(testLineQueueDropsNulAndSplitsLongLines);
+    RUN_TEST(testParseNumberAcceptsOnlyCompleteFiniteNumbers);
+    RUN_TEST(testWholeNumberAndRange);
+    RUN_TEST(testHoldStateReportsEdgesOnly);
+    RUN_TEST(testHoldStateExpiresWithoutKeepAlive);
     return UNITY_END();
 }

@@ -26,7 +26,7 @@ struct Config {
     uint32_t wifiConnectTimeoutMs = 10000; ///< How long begin() waits for the WiFi connection.
 
     // --- Security ---
-    /// When set, the settings page, the JSON API, WebSerial and ArduinoOTA require this password.
+    /// When set, all web pages, the JSON API, the web console and ArduinoOTA require this password.
     /// Empty = unprotected (anyone on the network can reconfigure and reflash the device).
     String adminUser = "admin";
     String adminPassword;
@@ -41,7 +41,7 @@ struct Config {
     String githubFilesystemAsset;                ///< Optional filesystem image, same placeholder.
 
     // --- Services ---
-    bool enableWebSerial = true;
+    bool enableConsole = true; ///< Web console at /console.
     bool enableOta = true;
     Stream* serial = nullptr; ///< Console output/input stream. nullptr = Serial.
 };

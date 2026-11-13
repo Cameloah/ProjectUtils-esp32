@@ -1,232 +1,133 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <title>Device Settings</title>
+  <meta charset="UTF-8">
+  <title>Settings</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" type="text/css" href="/style.css">
+  <link rel="stylesheet" href="/pu/app.css">
+  <script src="/pu/app.js"></script>
 </head>
 <body>
-  <div class="hamburger-menu">
-    <input id="menu__toggle" type="checkbox" />
-    <label class="menu__btn" for="menu__toggle">
-      <span></span>
-    </label>
-
-    <ul class="menu__box">
-      <li><a class="menu__item" href="/">Home</a></li>
-      <li><a class="menu__item" href="/settings">Network settings</a></li>
-      <li><a class="menu__item" href="/webserial">Webserial</a></li>
-    </ul>
-  </div>
-  <h1>Device Settings</h1>
+<h1>Settings</h1>
 <div class="content">
-  <div class="card-grid">
-    <div class="card">
-      <div class="settings">
-        <form id="settingsForm">
-          <h2>General</h2>
-          <div class="twocolumns">
-            <div class="setting_box">
-              <label for="deviceName">Device Name</label>
-            </div>
-            <div class="setting_box">
-              <input type="text" id="deviceName" name="deviceName" value=""><br>
-            </div>
-          </div>
-          <br><br>
+  <form class="card" id="settingsForm">
+    <h2>General</h2>
+    <div class="row">
+      <label for="deviceName">Device name</label>
+      <div class="control"><input type="text" id="deviceName" name="deviceName" maxlength="32"></div>
+    </div>
 
-          <h2>Network</h2>
-
-          <div class="twocolumns">
-            <div class="setting_box">
-              <label for="ssid">WiFi Name</label>
-            </div>
-            <div class="setting_box">
-              <input type="text" id="ssid" name="ssid"><br>
-            </div>
-          </div>
-
-          <div class="twocolumns">
-            <div class="setting_box">
-              <label for="pass">Password</label>
-            </div>
-            <div class="setting_box">
-              <input type="password" id="pass" name="pass" autocomplete="off"><br>
-            </div>
-          </div>
-
-          <div class="twocolumns">
-            <div class="setting_box">
-              <label for="ip">IP Address</label>
-            </div>
-            <div class="setting_box">
-              <input type="text" id="ip" name="ip" placeholder="automatic (DHCP)"><br>
-            </div>
-          </div>
-
-          <div class="twocolumns">
-            <div class="setting_box">
-              <label for="gateway">Gateway Address</label>
-            </div>
-            <div class="setting_box">
-              <input type="text" id="gateway" name="gateway"><br>
-            </div>
-          </div>
-          <br><br>
-
-          <input type="submit" value="Submit">
-          <p id="formMessage"></p>
-          <br><br>
-
-          <hr width="auto" />
-        </form>
-
-        <h2>Advanced</h2>
-
-        <div class="twocolumns">
-          <div>
-            <label for="autoUpdates">Automatic Updates</label>
-          </div>
-          <div class="setting_box">
-            <label class="switch">
-              <input type="checkbox" id="autoUpdates">
-              <span class="slider round"></span>
-            </label>
-          </div>
-        </div>
-        <br>
-
-        <button id="checkForUpdates">Check for Updates</button>
-        <br><br>
-
-        <div class="twocolumns">
-          <div class="setting_box">
-            <label for="specificFW">Install Firmware Version:</label>
-          </div>
-          <div class="setting_box">
-            <input type="text" id="specificFW" name="specificFW" value="" width="10px">
-          </div>
-          <div>
-            <button id="installSpecific">Install</button>
-          </div>
-        </div>
-        <br>
-        <p id="firmwareInfo"></p>
-        <br>
+    <h2>WiFi</h2>
+    <div class="row">
+      <label for="ssid">Network name</label>
+      <div class="control"><input type="text" id="ssid" name="ssid" maxlength="32" autocapitalize="off"></div>
+    </div>
+    <div class="actions">
+      <button type="button" class="secondary" id="scan">Search for networks</button>
+    </div>
+    <ul class="list" id="networks"></ul>
+    <div class="row">
+      <label for="pass">Password</label>
+      <div class="control"><input type="password" id="pass" name="pass" maxlength="64" autocomplete="off"></div>
+    </div>
+    <div class="row">
+      <label for="clearPass">Open network (no password)</label>
+      <div class="control">
+        <label class="switch"><input type="checkbox" id="clearPass"><span class="slider"></span></label>
       </div>
     </div>
-  </div>
+    <div class="row">
+      <label for="ip">IP address</label>
+      <div class="control"><input type="text" id="ip" name="ip" placeholder="automatic (DHCP)"></div>
+    </div>
+    <div class="row">
+      <label for="gateway">Gateway</label>
+      <div class="control"><input type="text" id="gateway" name="gateway"></div>
+    </div>
+
+    <div class="actions"><input type="submit" value="Save and restart"></div>
+    <p class="muted" id="formMessage"></p>
+  </form>
 </div>
 
 <script>
   const byId = (id) => document.getElementById(id);
-  const updateButton = byId("checkForUpdates");
-  let latestVersion = "";
-  let updateAvailable = false;
-  let pollTimer = null;
 
-  function post(path, params) {
-    return fetch(path, { method: "POST", body: new URLSearchParams(params || {}) })
-      .then((response) => response.json());
-  }
-
-  function getStatus() {
-    return fetch("/api/pu/status").then((response) => response.json());
-  }
-
-  function setButton(button, text, color) {
-    button.classList.remove("green", "red", "orange");
-    if (color) {
-      button.classList.add(color);
-    }
-    button.textContent = text;
-  }
-
-  function showUpdate(update) {
-    latestVersion = update.latest;
-    updateAvailable = update.state === "available";
-    const busy = update.state === "checking" || update.state === "installing";
-    if (!update.configured) {
-      setButton(updateButton, "Updates not configured", null);
-      updateButton.disabled = true;
-    } else if (update.state === "checking") {
-      setButton(updateButton, "Checking...", null);
-    } else if (update.state === "installing") {
-      setButton(updateButton, "Installing...", "orange");
-    } else if (update.state === "installed") {
-      setButton(updateButton, "Installed, restarting...", "green");
-    } else if (update.state === "available") {
-      setButton(updateButton, update.latest + " - Install now", "orange");
-    } else if (update.state === "upToDate") {
-      setButton(updateButton, "Already on latest version", "green");
-    } else if (update.state === "failed") {
-      setButton(updateButton, "Error: " + update.message, "red");
-    } else {
-      setButton(updateButton, "Check for Updates", null);
-    }
-    if (!busy && pollTimer !== null) {
-      clearInterval(pollTimer);
-      pollTimer = null;
-    }
-  }
-
-  // Update checks and installs run in the background on the device, so poll until done.
-  function pollUpdate() {
-    if (pollTimer === null) {
-      pollTimer = setInterval(() => {
-        getStatus().then((status) => showUpdate(status.update)).catch(() => {});
-      }, 1000);
-    }
-  }
-
-  getStatus().then((status) => {
+  pu.get("/api/pu/status").then((status) => {
     byId("deviceName").value = status.deviceName;
     byId("ssid").value = status.wifi.ssid;
     byId("pass").placeholder = status.wifi.passwordSet ? "unchanged" : "";
     byId("ip").value = status.wifi.localIP;
     byId("gateway").value = status.wifi.gateway;
-    byId("autoUpdates").checked = status.autoUpdates;
-    byId("firmwareInfo").textContent = "Installed firmware: " + status.firmware;
-    showUpdate(status.update);
-    if (status.update.state === "checking" || status.update.state === "installing") {
-      pollUpdate();
-    }
+  }).catch((error) => pu.toast(error.message, true));
+
+  byId("clearPass").addEventListener("change", (event) => {
+    byId("pass").disabled = event.target.checked;
   });
 
+  // ---- network search ----
+  const bars = (rssi) => (rssi > -60 ? "strong" : rssi > -75 ? "medium" : "weak");
+
+  function showNetworks(networks) {
+    const list = byId("networks");
+    list.replaceChildren();
+    if (networks.length === 0) {
+      list.append(pu.el("li", null, "No networks found. Type the name above."));
+    }
+    networks.forEach((network) => {
+      const detail = bars(network.rssi) + (network.secure ? ", locked" : ", open");
+      list.append(pu.el("li", {
+        onclick: () => {
+          byId("ssid").value = network.ssid;
+          byId("clearPass").checked = !network.secure;
+          byId("pass").disabled = !network.secure;
+          if (network.secure) { byId("pass").focus(); }
+        },
+      }, pu.el("span", null, network.ssid), pu.el("span", { className: "muted" }, detail)));
+    });
+  }
+
+  function pollScan(button, attempts) {
+    pu.get("/api/pu/wifi/scan").then((scan) => {
+      if (scan.scanning && attempts > 0) {
+        setTimeout(() => pollScan(button, attempts - 1), 700);
+        return;
+      }
+      button.disabled = false;
+      button.textContent = "Search for networks";
+      showNetworks(scan.networks);
+    }).catch((error) => {
+      // while searching the device may be slow to answer; keep trying for a while
+      if (attempts > 0) {
+        setTimeout(() => pollScan(button, attempts - 1), 1000);
+        return;
+      }
+      button.disabled = false;
+      button.textContent = "Search for networks";
+      pu.toast(error.message, true);
+    });
+  }
+
+  byId("scan").addEventListener("click", (event) => {
+    const button = event.target;
+    button.disabled = true;
+    button.textContent = "Searching...";
+    pu.post("/api/pu/wifi/scan").then(() => setTimeout(() => pollScan(button, 20), 1000))
+      .catch((error) => { button.disabled = false; pu.toast(error.message, true); });
+  });
+
+  // ---- save ----
   byId("settingsForm").addEventListener("submit", (event) => {
     event.preventDefault();
-    const message = byId("formMessage");
-    post("/api/pu/settings", new FormData(event.target))
-      .then((result) => { message.textContent = result.message; })
-      .catch(() => { message.textContent = "Saving failed: no answer from the device."; });
-  });
-
-  byId("autoUpdates").addEventListener("change", (event) => {
-    const box = event.target;
-    post("/api/pu/autoupdates", { enabled: box.checked })
-      .then((result) => { if (!result.ok) { box.checked = !box.checked; } })
-      .catch(() => { box.checked = !box.checked; });
-  });
-
-  updateButton.addEventListener("click", () => {
-    if (updateAvailable) {
-      setButton(updateButton, "Installing " + latestVersion + "...", "orange");
-      post("/api/pu/update/install").then(pollUpdate);
-    } else {
-      setButton(updateButton, "Checking...", null);
-      post("/api/pu/update/check").then(pollUpdate);
+    const params = new FormData(event.target);
+    if (byId("clearPass").checked) {
+      params.set("clearPass", "true");
     }
-  });
-
-  byId("installSpecific").addEventListener("click", () => {
-    const version = byId("specificFW").value.trim();
-    if (version !== "") {
-      setButton(updateButton, "Installing " + version + "...", "orange");
-      post("/api/pu/update/install", { version: version }).then(pollUpdate);
-    }
+    pu.post("/api/pu/settings", params)
+      .then((result) => { byId("formMessage").textContent = result.message; pu.waitForRestart(); })
+      .catch((error) => { byId("formMessage").textContent = "Saving failed: " + error.message; });
   });
 </script>
-
 </body>
 </html>

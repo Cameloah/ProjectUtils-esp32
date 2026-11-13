@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Update</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/pu/app.css">
+  <script src="/pu/app.js"></script>
+</head>
+<body>
+<h1>Update</h1>
+<div class="content">
+  <div class="card">
+    <p id="firmwareInfo" class="muted"></p>
+
+    <h2>Upload a file</h2>
+    <div class="row">
+      <label for="file">File</label>
+      <div class="control"><input type="file" id="file" accept=".bin"></div>
+    </div>
+    <div class="row">
+      <label for="kind">Contents</label>
+      <div class="control">
+        <select id="kind">
+          <option value="firmware">Firmware</option>
+          <option value="filesystem">Filesystem image</option>
+        </select>
+      </div>
+    </div>
+    <div class="actions"><button id="upload">Upload and install</button></div>
+    <progress id="progress" value="0" max="100" hidden></progress>
+    <p id="uploadMessage" class="muted"></p>
+  </div>
+
+  <div class="card" id="githubCard" hidden>
+    <h2>Online updates</h2>
+    <div class="row">
+      <label for="autoUpdates">Install updates automatically at start</label>
+      <div class="control">
+        <label class="switch"><input type="checkbox" id="autoUpdates"><span class="slider"></span></label>
+      </div>
+    </div>
+    <div class="actions"><button id="checkForUpdates">Check for updates</button></div>
+    <div class="row">
+      <label for="specificFW">Install a specific version</label>
+      <div class="control">
+        <input type="text" id="specificFW" placeholder="v1.2.3" style="width: 7rem">
+        <button class="secondary" id="installSpecific">Install</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const byId = (id) => document.getElementById(id);
+  const fail = (error) => pu.toast(error.message, true);
+
+  // ---- file upload ----
+  byId("upload").addEventListener("click", () => {
+    const file = byId("file").files[0];
+    const message = byId("uploadMessage");
+    if (!file) {
+      message.textContent = "Choose a file first.";
+      return;
+    }
+    const button = byId("upload");
+    const progress = byId("progress");
+    const form = new FormData();
+    form.append("file", file, file.name);
+
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", "/api/pu/update/upload?type=" + byId("kind").value + "&size=" + file.size);
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable) {
+        progress.value = Math.round(100 * event.loaded / event.total);
+        message.textContent = "Uploading: " + progress.value + " %";
+      }
+    };
+    const done = (text) => { button.disabled = false; message.textContent = text; };
+    xhr.onerror = () => done("Upload failed: connection lost.");
+    xhr.onload = () => {
+      let result = {};
+      try { result = JSON.parse(xhr.responseText); } catch (error) { /* not JSON */ }
+      if (xhr.status === 200) {
+        done("Installed. The device restarts now.");
+        pu.waitForRestart();
+      } else {
+        done("Upload failed: " + (result.message || "HTTP " + xhr.status));
+      }
+    };
+    button.disabled = true;
+    progress.hidden = false;
+    progress.value = 0;
+    xhr.send(form);
+  });
+
+  // ---- online updates (GitHub releases) ----
+  const updateButton = byId("checkForUpdates");
+  let latestVersion = "";
+  let updateAvailable = false;
+  let pollTimer = null;
+
+  function setButton(text, color) {
+    updateButton.className = color || "";
+    updateButton.textContent = text;
+  }
+
+  function showUpdate(update) {
+    latestVersion = update.latest;
+    updateAvailable = update.state === "available";
+    const busy = update.state === "checking" || update.state === "installing";
+    const labels = {
+      checking: ["Checking...", ""],
+      installing: ["Installing...", "orange"],
+      installed: ["Installed, restarting...", "green"],
+      available: [update.latest + " - install now", "orange"],
+      upToDate: ["Already on the latest version", "green"],
+      failed: ["Error: " + update.message, "red"],
+    };
+    const label = labels[update.state] || ["Check for updates", ""];
+    setButton(label[0], label[1]);
+    if (update.state === "installed") {
+      pu.waitForRestart();
+    }
+    if (!busy && pollTimer !== null) {
+      clearInterval(pollTimer);
+      pollTimer = null;
+    }
+  }
+
+  // Checks and installs run in the background on the device, so poll until they are done.
+  function pollUpdate() {
+    if (pollTimer === null) {
+      pollTimer = setInterval(() => {
+        pu.get("/api/pu/status").then((status) => showUpdate(status.update)).catch(() => {});
+      }, 1000);
+    }
+  }
+
+  pu.get("/api/pu/status").then((status) => {
+    byId("firmwareInfo").textContent = "Installed firmware: " + status.firmware;
+    byId("githubCard").hidden = !status.update.configured;
+    byId("autoUpdates").checked = status.autoUpdates;
+    showUpdate(status.update);
+    if (status.update.state === "checking" || status.update.state === "installing") {
+      pollUpdate();
+    }
+  }).catch(fail);
+
+  byId("autoUpdates").addEventListener("change", (event) => {
+    const box = event.target;
+    pu.post("/api/pu/autoupdates", { enabled: box.checked })
+      .catch((error) => { box.checked = !box.checked; fail(error); });
+  });
+
+  updateButton.addEventListener("click", () => {
+    if (updateAvailable) {
+      setButton("Installing " + latestVersion + "...", "orange");
+      pu.post("/api/pu/update/install").then(pollUpdate).catch(fail);
+    } else {
+      setButton("Checking...", "");
+      pu.post("/api/pu/update/check").then(pollUpdate).catch(fail);
+    }
+  });
+
+  byId("installSpecific").addEventListener("click", () => {
+    const version = byId("specificFW").value.trim();
+    if (version !== "") {
+      setButton("Installing " + version + "...", "orange");
+      pu.post("/api/pu/update/install", { version: version }).then(pollUpdate).catch(fail);
+    }
+  });
+</script>
+</body>
+</html>

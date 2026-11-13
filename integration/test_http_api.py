@@ -11,12 +11,30 @@ import pytest
 LOG_LINE = re.compile(r"^(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d\.\d{3}|\S+) (INFO|WARNING|ERROR): .+")
 MUTATING = [
     "/api/pu/settings",
+    "/api/pu/wifi/scan",
+    "/api/pu/page/widget",
+    "/api/pu/update/upload",
     "/api/pu/autoupdates",
     "/api/pu/update/check",
     "/api/pu/update/install",
     "/api/pu/restart",
 ]
-PROTECTED_GET = ["/settings", "/api/pu/status", "/api/pu/log", "/webserial"]
+PROTECTED_GET = [
+    "/",
+    "/about",
+    "/settings",
+    "/update",
+    "/console",
+    "/info",
+    "/api/pu/nav",
+    "/api/pu/status",
+    "/api/pu/info",
+    "/api/pu/log",
+    "/api/pu/wifi/scan",
+    "/api/pu/console/token",
+    "/api/pu/page?path=/",
+    "/api/pu/page/values?path=/",
+]
 
 
 def test_status_reports_a_connected_device(device):
@@ -39,21 +57,8 @@ def test_status_never_contains_the_wifi_password(device):
     assert isinstance(wifi["passwordSet"], bool)
 
 
-def test_settings_page_and_stylesheet_are_served_from_firmware(device):
-    page = device.get("/settings")
-    assert page.status_code == 200
-    assert page.headers["Content-Type"].startswith("text/html")
-    assert 'id="settingsForm"' in page.text
-    assert page.text.rstrip().endswith("</html>")  # not cut off
-
-    style = device.get("/style.css")
-    assert style.status_code == 200
-    assert style.headers["Content-Type"].startswith("text/css")
-    assert len(style.text) > 500
-
-
 def test_project_route_registered_by_the_example(device):
-    response = device.get("/")
+    response = device.get("/hello")
     assert response.status_code == 200
     assert response.text == "Hello from " + device.status()["deviceName"]
 
@@ -79,7 +84,7 @@ def test_log_timestamps_are_wall_clock_time_after_ntp_sync(device):
     assert re.match(r"20\d\d-\d\d-\d\d ", first), f"no date in log line: {first!r}"
 
 
-@pytest.mark.parametrize("path", MUTATING)
+@pytest.mark.parametrize("path", [path for path in MUTATING if path != "/api/pu/wifi/scan"])
 def test_state_changing_endpoints_refuse_get(device, path):
     assert device.get(path).status_code in {404, 405}
 

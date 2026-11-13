@@ -32,6 +32,8 @@ class Settings {
     esp_err_t defineBlob(const char* key, const uint8_t* data, size_t size);
 
     bool contains(const char* key) const;
+    /// Stores the type of `key` in `type`; returns false if the key is not defined.
+    bool typeOf(const char* key, Type& type) const;
 
     int32_t getInt(const char* key, int32_t fallback = 0) const;
     float getFloat(const char* key, float fallback = 0.0F) const;

@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Device info</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/pu/app.css">
+  <script src="/pu/app.js"></script>
+</head>
+<body>
+<h1>Device info</h1>
+<div class="content">
+  <div class="card">
+    <table class="info" id="info"></table>
+    <div class="actions"><button class="red" id="restart">Restart device</button></div>
+  </div>
+  <div class="card">
+    <h2>Log</h2>
+    <pre class="log" id="log"></pre>
+    <div class="actions"><button class="secondary" id="refreshLog">Refresh</button></div>
+  </div>
+</div>
+
+<script>
+  const byId = (id) => document.getElementById(id);
+  const kb = (bytes) => Math.round(bytes / 1024) + " KB";
+
+  function duration(seconds) {
+    const days = Math.floor(seconds / 86400);
+    const clock = new Date((seconds % 86400) * 1000).toISOString().substring(11, 19);
+    return (days > 0 ? days + " d " : "") + clock;
+  }
+
+  function showInfo(info) {
+    const rows = [
+      ["Name", info.deviceName],
+      ["Firmware", info.firmware],
+      ["Address", info.ip + " (" + info.hostname + ".local)"],
+      ["WiFi", info.connected ? info.ssid + ", " + info.rssi + " dBm" : "not connected (" + info.mode + ")"],
+      ["MAC address", info.mac],
+      ["Time", info.time],
+      ["Running for", duration(info.uptimeSeconds)],
+      ["Last start reason", info.resetReason],
+      ["Free memory", kb(info.heapFree) + " of " + kb(info.heapSize) + " (lowest " + kb(info.heapMinFree) + ")"],
+      ["Firmware size", kb(info.sketchSize) + " of " + kb(info.sketchSize + info.sketchFree)],
+      ["Chip", info.chip + " rev " + info.chipRevision + ", " + info.cores + " cores, " + info.cpuMHz + " MHz"],
+      ["Flash size", kb(info.flashSize)],
+      ["SDK", info.sdk],
+    ];
+    byId("info").replaceChildren(...rows.map(([name, value]) =>
+      pu.el("tr", null, pu.el("td", null, name), pu.el("td", null, String(value)))));
+  }
+
+  const loadInfo = () => pu.get("/api/pu/info").then(showInfo).catch(() => {});
+  const loadLog = () => pu.get("/api/pu/log").then((text) => {
+    const log = byId("log");
+    log.textContent = text;
+    log.scrollTop = log.scrollHeight;
+  }).catch((error) => pu.toast(error.message, true));
+
+  loadInfo();
+  loadLog();
+  setInterval(loadInfo, 5000);
+  byId("refreshLog").addEventListener("click", loadLog);
+  byId("restart").addEventListener("click", () => {
+    if (confirm("Restart the device now?")) {
+      pu.post("/api/pu/restart").then(pu.waitForRestart).catch((error) => pu.toast(error.message, true));
+    }
+  });
+</script>
+</body>
+</html>
