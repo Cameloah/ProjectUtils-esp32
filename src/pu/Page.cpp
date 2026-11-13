@@ -110,6 +110,10 @@ Widget& Page::text(Settings& settings, const char* key, const char* label) {
     return addBound(Widget::Kind::Text, settings, key, label);
 }
 
+Widget& Page::password(Settings& settings, const char* key, const char* label) {
+    return addBound(Widget::Kind::Password, settings, key, label);
+}
+
 Widget& Page::select(Settings& settings, const char* key, const char* label,
                      std::initializer_list<const char*> options) {
     Widget& widget = addBound(Widget::Kind::Select, settings, key, label);
@@ -328,6 +332,7 @@ int Page::setValue(size_t index, const String& text, String& message) {
     }
 
     case Widget::Kind::Text:
+    case Widget::Kind::Password:
         if (text.length() > kMaxTextLength) {
             message = "text is too long";
             return 400;
@@ -435,6 +440,9 @@ String Page::valuesJson() {
         case Widget::Kind::Text:
             values.add(widget.settings_->getString(key));
             break;
+        case Widget::Kind::Password: // only whether one is stored, never the value
+            values.add(!widget.settings_->getString(key).isEmpty());
+            break;
         case Widget::Kind::Select:
             if (type == Settings::Type::Int) {
                 const int32_t position = widget.settings_->getInt(key);
@@ -472,8 +480,9 @@ String Page::valuesJson() {
 }
 
 String Page::layoutJson() {
-    static const char* const kKindNames[] = {"section", "number", "text", "toggle", "slider",
-                                             "select",  "button", "hold", "value",  "indicator"};
+    static const char* const kKindNames[] = {"section", "number", "text",     "password",
+                                             "toggle",  "slider", "select",   "button",
+                                             "hold",    "value",  "indicator"};
     JsonDocument doc;
     doc["title"] = title_;
     JsonArray widgets = doc["widgets"].to<JsonArray>();

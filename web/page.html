@@ -71,6 +71,16 @@
       const input = pu.el("input", { type: "text", maxLength: 200 });
       return ["row", row(widget, bindInput(input, index, () => input.value), input)];
     },
+    password(widget, index) {
+      const input = pu.el("input", { type: "password", maxLength: 200, autocomplete: "new-password" });
+      const mark = bindInput(input, index, () => input.value);
+      // the device never sends the stored password, only whether there is one
+      updaters[index] = (isSet) => {
+        input.placeholder = isSet ? "unchanged" : "not set";
+        if (document.activeElement !== input && input.classList.contains("saved")) { input.value = ""; }
+      };
+      return ["row", row(widget, mark, input)];
+    },
     select(widget, index) {
       const input = pu.el("select", null, ...widget.options.map((option) => pu.el("option", null, option)));
       return ["row", row(widget, bindInput(input, index, () => input.value), input)];

@@ -51,6 +51,7 @@ void buildHomePage() {
 
     home.section("Settings"); // inputs bound to settings: loaded, checked and saved for you
     home.text(appSettings, "greeting", "Greeting");
+    home.password(appSettings, "apiKey", "API key"); // stored, but never shown again
     home.number(appSettings, "interval", "Interval").unit("s").min(0.1).max(60).step(0.1);
     home.slider(appSettings, "brightness", "Brightness").unit("%");
     home.toggle(appSettings, "nightMode", "Night mode");
@@ -93,6 +94,7 @@ void setup() {
     appSettings.begin("app", &ProjectUtils.log());
     appSettings.define("bootCount", 0);
     appSettings.define("greeting", "hello");
+    appSettings.define("apiKey", "");
     appSettings.define("interval", 1.5F);
     appSettings.define("brightness", 50);
     appSettings.define("nightMode", false);

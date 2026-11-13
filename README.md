@@ -123,6 +123,7 @@ void buildHomePage() {
 |---|---|
 | `section(title)` | Heading for a group |
 | `number`, `slider`, `toggle`, `text`, `select` `(settings, key, label)` | Input bound to a `pu::Settings` key of matching type. Changes are checked (`min`, `max`, whole numbers for `int`) and saved |
+| `password(settings, key, label)` | Like `text`, but the stored value is never sent to the browser; the page only shows whether one is set |
 | `number`, `slider`, `toggle` `(label, getter, setter)` | Input bound to your own code; nothing is stored |
 | `button(label, onClick)` | Runs `onClick` once per click |
 | `holdButton(label, onHold)` | `onHold(true)` when pressed, `onHold(false)` when released, and also if the browser stops responding for a second (closed tab, lost WiFi) |

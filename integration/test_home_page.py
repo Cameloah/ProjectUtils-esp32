@@ -20,7 +20,7 @@ def test_layout_lists_the_widgets_in_declared_order(home):
     assert home.layout["title"] == "My ESP32"
     kinds = [widget["kind"] for widget in home.layout["widgets"]]
     assert kinds == [
-        "section", "text", "number", "slider", "toggle", "select",
+        "section", "text", "password", "number", "slider", "toggle", "select",
         "section", "toggle", "slider", "hold", "button", "button",
         "section", "value", "value", "value", "indicator", "indicator",
     ]  # fmt: skip
@@ -141,3 +141,15 @@ def test_bound_setting_survives_a_restart(device, home):
         assert HomePage(device).value("Brightness") == changed
     finally:
         HomePage(device).act("Brightness", "set", original)
+
+
+def test_password_input_is_stored_but_never_sent_back(device, home):
+    secret = "s3cret-value-for-test"
+    try:
+        assert home.act("API key", "set", secret).status_code == 200
+        assert home.value("API key") is True  # only "one is set"
+        for path in ("/api/pu/page?path=/", "/api/pu/page/values?path=/", "/api/pu/status"):
+            assert secret not in device.get(path).text, path
+    finally:
+        home.act("API key", "set", "")
+    assert home.value("API key") is False

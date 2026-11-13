@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.1.0
+
+### Added
+
+- `Page::password()`: an input for secrets such as API keys or MQTT passwords. The value is
+  stored like any setting but never sent back to the browser.
+
 ## 2.0.0
 
 Redesign of the library. Not source-compatible with 1.x; see "Migrating from v1" in the README.

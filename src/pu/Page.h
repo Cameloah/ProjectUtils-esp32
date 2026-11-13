@@ -41,6 +41,7 @@ class Widget {
         Section,
         Number,
         Text,
+        Password,
         Toggle,
         Slider,
         Select,
@@ -102,6 +103,9 @@ class Page {
     Widget& toggle(Settings& settings, const char* key, const char* label);
     /// Text field for a string setting.
     Widget& text(Settings& settings, const char* key, const char* label);
+    /// Password field for a string setting. The stored value is never sent to the browser;
+    /// the page only shows whether one is set. Saving an empty field clears it.
+    Widget& password(Settings& settings, const char* key, const char* label);
     /// Drop-down list. A string setting stores the chosen text, an int setting its position.
     Widget& select(Settings& settings, const char* key, const char* label,
                    std::initializer_list<const char*> options);
