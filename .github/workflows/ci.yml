@@ -64,6 +64,7 @@ jobs:
           path: ~/.platformio
           key: pio-analysis-${{ hashFiles('platformio.ini', 'examples/basic/platformio.ini', 'library.json') }}
       - run: pip install platformio
-      - run: sudo apt-get update && sudo apt-get install -y clang-tidy
+      # same version as CLANG_TIDY_VERSION in scripts/run_clang_tidy.py
+      - run: pip install clang-tidy==23.1.4
       - run: pio check -e check --fail-on-defect=low
       - run: python3 scripts/run_clang_tidy.py

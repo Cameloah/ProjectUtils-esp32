@@ -375,7 +375,8 @@ pre-commit install                  # format and lint on every commit
 pio test -e native                  # unit tests on the host
 pio run -d examples/basic           # build the example for all boards
 pio check -e check --fail-on-defect=low
-python3 scripts/run_clang_tidy.py   # needs clang-tidy on the PATH
+uv tool install clang-tidy==23.1.4  # the version CI uses
+python3 scripts/run_clang_tidy.py
 ```
 
 ### On-device tests

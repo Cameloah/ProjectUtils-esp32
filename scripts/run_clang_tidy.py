@@ -12,6 +12,9 @@ to clang-tidy, which makes it misparse the code. This script instead:
    framework and third-party headers are dropped: clang cannot compile the xtensa inline
    assembly in a few ESP-IDF headers, which is irrelevant for checking this library.
 
+Different clang-tidy versions report different findings, so CI and local runs use the version
+pinned in CLANG_TIDY_VERSION (install it with `uv tool install clang-tidy==<version>`).
+
 Usage: python3 scripts/run_clang_tidy.py [--env esp32dev] [--fix]
 """
 
@@ -27,6 +30,7 @@ import sys
 import tempfile
 from pathlib import Path
 
+CLANG_TIDY_VERSION = "23.1.4"  # keep in sync with .github/workflows/ci.yml
 ROOT = Path(__file__).resolve().parent.parent
 EXAMPLE = ROOT / "examples" / "basic"
 SOURCES = ROOT / "src"
@@ -110,6 +114,21 @@ def source_path(entry: dict) -> Path:
     return (path if path.is_absolute() else Path(entry["directory"]) / path).resolve()
 
 
+def check_version() -> None:
+    """Warn when the installed clang-tidy is not the pinned one: CI may then report differently."""
+    output = subprocess.run(
+        ["clang-tidy", "--version"], capture_output=True, text=True, check=False
+    ).stdout
+    match = re.search(r"version (\d+\.\d+\.\d+)", output)
+    found = match.group(1) if match else "unknown"
+    if found != CLANG_TIDY_VERSION:
+        print(
+            f"warning: clang-tidy {found} found, CI uses {CLANG_TIDY_VERSION}; "
+            f"results may differ (uv tool install clang-tidy=={CLANG_TIDY_VERSION})",
+            file=sys.stderr,
+        )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--env", default="esp32dev", help="environment of examples/basic to use")
@@ -120,6 +139,7 @@ def main() -> int:
         if shutil.which(tool) is None:
             print(f"error: {tool} not found on PATH", file=sys.stderr)
             return 2
+    check_version()
 
     subprocess.run(
         ["pio", "run", "-d", str(EXAMPLE), "-e", options.env, "-t", "compiledb", "--silent"],
