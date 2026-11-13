@@ -19,6 +19,7 @@ namespace pu {
 namespace {
 const uint32_t kRestartDelayMs = 1500; // enough for the HTTP reply to reach the browser
 const char kJson[] = "application/json";
+const size_t kWebConsoleLineSize = 256; // longer lines reach the web console in pieces
 
 void sendJson(AsyncWebServerRequest* request, int code, const JsonDocument& doc) {
     String body;
@@ -89,12 +90,51 @@ void WebUi::beginWebSerial(Console& console) {
     }
     WebSerial.onMessage([&console](uint8_t* data, size_t length) {
         static const uint8_t kNewline = '\n';
+        // Browsers send the text with a trailing NUL and sometimes a line break of their own.
+        while (length > 0 &&
+               (data[length - 1] == '\0' || data[length - 1] == '\n' || data[length - 1] == '\r')) {
+            --length;
+        }
         console.injectInput(data, length);
         console.injectInput(&kNewline, 1);
     });
-    console.setMirror([](const uint8_t* data, size_t length) { WebSerial.write(data, length); });
+    console.setMirror([this](const uint8_t* data, size_t length) {
+        std::lock_guard<std::mutex> lock(webConsoleMutex_);
+        webConsoleOut_.push(data, length);
+    });
 #else
     (void)console;
+#endif
+}
+
+void WebUi::pumpWebSerial() {
+#ifndef PU_DISABLE_WEBSERIAL
+    if (!config_->enableWebSerial) {
+        return;
+    }
+    // WebSerial only sends what it has buffered when it is called again, and it starts a new
+    // row whenever writes are more than 100 us apart. So: one line per write, spaced out, and
+    // loop() called on every pass to push the rows to the browser.
+    static const uint32_t kMinWriteGapUs = 500;
+    WebSerial.loop();
+    if (micros() - webConsoleLastWriteUs_ < kMinWriteGapUs) {
+        return;
+    }
+    char line[kWebConsoleLineSize];
+    int length = 0;
+    {
+        std::lock_guard<std::mutex> lock(webConsoleMutex_);
+        length = webConsoleOut_.pop(line, sizeof(line));
+    }
+    if (length < 0) {
+        return;
+    }
+    if (length == 0) { // WebSerial ignores empty writes; keep blank lines visible
+        line[0] = ' ';
+        length = 1;
+    }
+    WebSerial.write(reinterpret_cast<const uint8_t*>(line), static_cast<size_t>(length));
+    webConsoleLastWriteUs_ = micros();
 #endif
 }
 
@@ -247,6 +287,7 @@ void WebUi::handleInstallPost(AsyncWebServerRequest* request) {
 }
 
 void WebUi::loop() {
+    pumpWebSerial();
     if (checkRequested_.exchange(false)) {
         updater_->check();
     }

@@ -259,14 +259,43 @@ uv tool install pre-commit
 pre-commit install                  # format and lint on every commit
 
 pio test -e native                  # unit tests on the host
-pio run -d examples/basic           # build the example for both Arduino core versions
+pio run -d examples/basic           # build the example for all boards
 pio check -e check --fail-on-defect=low
 python3 scripts/run_clang_tidy.py   # needs clang-tidy on the PATH
 ```
 
+### On-device tests
+
+`integration/` holds a pytest suite that talks to a real ESP32 running `examples/basic` over
+WiFi: settings page, JSON API, web console, and (optionally) restarts, stored settings and the
+admin login. It cannot run on GitHub Actions; run it before a release.
+
+Flash the example once over USB and connect the board to your WiFi. From then on:
+
+```sh
+alias devtest='uv run --no-project --with-requirements integration/requirements.txt pytest integration'
+
+devtest --device 192.168.1.210                     # quick, read-only checks
+devtest --device 192.168.1.210 --disruptive        # also restart and save settings
+devtest --device 192.168.1.210 --flash esp32s3     # build and flash over WiFi first
+```
+
+To test the admin login, let the suite build a protected firmware, and remove it afterwards:
+
+```sh
+devtest --device 192.168.1.210 --flash esp32s3 --admin-password test1234
+devtest --device 192.168.1.210 --flash esp32s3 --ota-password test1234    # back to open
+```
+
+`--flash` takes any environment from `examples/basic/platformio.ini`. The address can also be
+given as `PU_DEVICE`. Without a device, every test is skipped.
+
+Not covered: the first-time setup through the access point (the test machine would have to
+change WiFi networks) and installing an update from a GitHub release.
+
 The web pages live in `web/`. After editing them, `scripts/embed_web_assets.py` regenerates
-`src/pu/web_assets.gen.h`; the pre-commit hook does this automatically. GitHub Actions runs all
-of the above on every push and pull request.
+`src/pu/web_assets.gen.h`; the pre-commit hook does this automatically. GitHub Actions runs
+everything except the on-device tests on every push and pull request.
 
 ## License
 

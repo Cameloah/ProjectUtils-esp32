@@ -6,6 +6,7 @@
 #include <mutex>
 
 #include "Config.h"
+#include "LineQueue.h"
 
 namespace pu {
 
@@ -40,6 +41,7 @@ class WebUi {
   private:
     void registerRoutes();
     void beginWebSerial(Console& console);
+    void pumpWebSerial();
     void handleStatus(AsyncWebServerRequest* request) const;
     void handleSettingsPost(AsyncWebServerRequest* request);
     void handleAutoUpdatesPost(AsyncWebServerRequest* request);
@@ -58,6 +60,13 @@ class WebUi {
     std::atomic<uint32_t> restartAtMs_{0};
     std::mutex installMutex_;
     String installTag_;
+
+    // Console output waiting for the web console. Filled from any task, drained by loop(), so
+    // the WebSerial library itself is only ever touched from one task.
+    static const size_t kWebConsoleQueueSize = 4096;
+    std::mutex webConsoleMutex_;
+    LineQueue<kWebConsoleQueueSize> webConsoleOut_;
+    uint32_t webConsoleLastWriteUs_ = 0;
 };
 
 } // namespace pu

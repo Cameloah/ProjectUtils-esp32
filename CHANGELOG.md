@@ -41,6 +41,8 @@ are kept.
 - Unit tests for the hardware-independent parts, an example project, and CI that builds for
   Arduino core 2.x and 3.x.
 - Enforced formatting and linting (clang-format, clang-tidy, cppcheck, ruff, pre-commit).
+- On-device test suite (`integration/`, pytest) that checks the example firmware on a real
+  ESP32 over WiFi, and an `esp32s3` environment for the example.
 
 ### Fixed
 

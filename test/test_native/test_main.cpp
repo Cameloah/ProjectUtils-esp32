@@ -7,10 +7,12 @@
 
 #include "pu/ByteQueue.h"
 #include "pu/Hostname.h"
+#include "pu/LineQueue.h"
 #include "pu/RingLog.h"
 #include "pu/Semver.h"
 
 using pu::ByteQueue;
+using pu::LineQueue;
 using pu::LogLevel;
 using pu::RingLog;
 using pu::Semver;
@@ -154,6 +156,47 @@ static void testByteQueueDropsOverflowAndWraps() {
     TEST_ASSERT_EQUAL_INT(-1, queue.pop());
 }
 
+// ---------- LineQueue ----------
+
+static size_t pushText(LineQueue<16>& queue, const char* text) {
+    return queue.push(reinterpret_cast<const uint8_t*>(text), strlen(text));
+}
+
+static void testLineQueueReturnsWholeLinesOnly() {
+    LineQueue<16> queue;
+    char line[16];
+    pushText(queue, "abc");
+    TEST_ASSERT_FALSE(queue.hasLine());
+    TEST_ASSERT_EQUAL_INT(-1, queue.pop(line, sizeof(line)));
+    pushText(queue, "def\r\n\nxy");
+    TEST_ASSERT_EQUAL_INT(6, queue.pop(line, sizeof(line)));
+    TEST_ASSERT_EQUAL_STRING("abcdef", line); // pieces joined, '\r' dropped
+    TEST_ASSERT_EQUAL_INT(0, queue.pop(line, sizeof(line)));
+    TEST_ASSERT_EQUAL_STRING("", line);                       // blank line preserved
+    TEST_ASSERT_EQUAL_INT(-1, queue.pop(line, sizeof(line))); // "xy" is not finished yet
+}
+
+static void testLineQueueDropsNulAndSplitsLongLines() {
+    LineQueue<16> queue;
+    char line[8];
+    const uint8_t withNul[] = {'h', 'i', '\0', '\n'};
+    TEST_ASSERT_EQUAL_UINT(4, queue.push(withNul, sizeof(withNul)));
+    TEST_ASSERT_EQUAL_INT(2, queue.pop(line, sizeof(line)));
+    TEST_ASSERT_EQUAL_STRING("hi", line);
+
+    // a line longer than the queue: the overflow is dropped, the rest comes out in pieces
+    TEST_ASSERT_EQUAL_UINT(16, pushText(queue, "0123456789abcdefXYZ"));
+    TEST_ASSERT_TRUE(queue.hasLine());
+    TEST_ASSERT_EQUAL_INT(7, queue.pop(line, sizeof(line)));
+    TEST_ASSERT_EQUAL_STRING("0123456", line);
+    TEST_ASSERT_EQUAL_UINT(1, pushText(queue, "\n"));
+    TEST_ASSERT_EQUAL_INT(7, queue.pop(line, sizeof(line)));
+    TEST_ASSERT_EQUAL_STRING("789abcd", line);
+    TEST_ASSERT_EQUAL_INT(2, queue.pop(line, sizeof(line)));
+    TEST_ASSERT_EQUAL_STRING("ef", line);
+    TEST_ASSERT_EQUAL_UINT(0, queue.size());
+}
+
 int main() {
     UNITY_BEGIN();
     RUN_TEST(testSemverParsesWithAndWithoutPrefix);
@@ -166,5 +209,7 @@ int main() {
     RUN_TEST(testRingLogTruncatesLongText);
     RUN_TEST(testByteQueueFifo);
     RUN_TEST(testByteQueueDropsOverflowAndWraps);
+    RUN_TEST(testLineQueueReturnsWholeLinesOnly);
+    RUN_TEST(testLineQueueDropsNulAndSplitsLongLines);
     return UNITY_END();
 }

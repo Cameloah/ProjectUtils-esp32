@@ -17,6 +17,9 @@ void setup() {
     config.deviceName = "My ESP32";
     config.firmwareVersion = pu::Semver{0, 0, 1};
     // config.adminPassword = "change-me";          // protect settings, API, console and OTA
+#ifdef PU_EXAMPLE_ADMIN_PASSWORD
+    config.adminPassword = PU_EXAMPLE_ADMIN_PASSWORD; // set by the on-device tests
+#endif
     // config.githubRepo = "your-user/your-repo";   // enable updates from GitHub releases
     ProjectUtils.begin(config);
 
