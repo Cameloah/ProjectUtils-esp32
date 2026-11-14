@@ -1,5 +1,36 @@
 # Changelog
 
+## 2.2.0
+
+### Added
+
+- Static IP address on the settings page as a switch, with subnet mask and DNS servers. It is
+  prefilled with what the router hands out and checked on the device (valid mask, gateway in
+  the same subnet, usable address). A new address is tried out: unless it is confirmed within
+  two minutes at the new address, the device restores the previous settings. The page follows
+  the device to its new address. New API: `POST /api/pu/network/confirm` and `.../revert`.
+- Access point section on the settings page: mode, timeout, grace period and password per
+  device, on top of the firmware defaults in `pu::Config`. `Config::apLocked` makes them
+  read-only.
+- `ApMode::Never` (access point only while no WiFi is stored) and `Config::apGraceMs`.
+- Memory page (`/memory`): every value stored in flash, by area. Change values, reset entries
+  the firmware defines to their default, delete entries it does not define, add new entries to
+  the project's areas or a new one. Secret values never reach the browser.
+- `Settings::reset(key)`, `Settings::markSecret(key)`, `Settings::forEach()`, `Settings::all()`.
+- Console page: uses the full window width and height, "Wrap lines" switch (off by default,
+  remembered by the browser; the log on the device info page shares it). Page options are
+  switches instead of check boxes.
+
+### Changed
+
+- `ApMode::OnFailure` now also opens the access point while running, after WiFi has been lost
+  for `apGraceMs` (2 minutes), not only at start-up.
+- The access point timeout applies in every mode, including `Always`, and counts from when the
+  last client left. When no WiFi is stored, the access point opens regardless of the mode.
+- `/api/pu/status`: `wifi.localIP` and `wifi.gateway` are replaced by the `address` object;
+  new `ap` object. A static IP is now only used while the switch is on; devices that had an
+  address entered are switched on automatically.
+
 ## 2.1.1
 
 ### Fixed

@@ -111,6 +111,7 @@ Widget& Page::text(Settings& settings, const char* key, const char* label) {
 }
 
 Widget& Page::password(Settings& settings, const char* key, const char* label) {
+    settings.markSecret(key); // hidden on the memory page as well
     return addBound(Widget::Kind::Password, settings, key, label);
 }
 

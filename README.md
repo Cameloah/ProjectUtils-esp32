@@ -34,7 +34,7 @@ Add the library to your project's `platformio.ini`. Its dependencies are install
 platform = espressif32
 board = esp32dev
 framework = arduino
-lib_deps = https://github.com/Cameloah/ProjectUtils-esp32.git#v2.0.0
+lib_deps = https://github.com/Cameloah/ProjectUtils-esp32.git#v2.2.0
 ; TLS, web server and web console need more room than the default app partition offers
 board_build.partitions = min_spiffs.csv
 ```
@@ -86,10 +86,62 @@ your project's pages first, then the built-in ones:
 | Page | Address | Contents |
 |---|---|---|
 | Your home page | `/` | Whatever you declare, see below. Without one, `/` shows the device info |
-| Settings | `/settings` | Device name, WiFi (with network search), static IP |
+| Settings | `/settings` | Device name, WiFi (with network search), static IP address, access point |
 | Update | `/update` | Upload a firmware or filesystem file; online updates if `githubRepo` is set |
-| Console | `/console` | Serial output and input, with timestamps, scroll lock and download |
+| Memory | `/memory` | Every stored value: change it, reset it to its default, delete leftovers, add new ones |
+| Console | `/console` | Serial output and input over the full window width, with timestamps, scroll lock, line wrap and download |
 | Device info | `/info` | Firmware, network, memory, uptime, reason of the last restart, log |
+
+### Static IP address
+
+Switching "Static IP address" on fills in what the router currently hands out; change the IP
+address and save. The device checks that address, subnet mask and gateway fit together, then
+restarts at the new address, and the settings page follows it there. Confirm the address with
+"Keep" within two minutes. If nobody confirms (because the device cannot be reached at the new
+address, for example), it goes back to the previous settings by itself and the page reloads at
+the old address. Changed through the setup access point, the address applies right away
+without this trial, since nobody could reach the device at its new address from there.
+
+### Memory
+
+Lists everything the device keeps in flash, by area (the NVS namespace of each `pu::Settings`
+object): your project's areas first, the library's own (`project_utils`) behind "Show library
+entries". Each entry shows its type and whether it is still at the firmware's default.
+
+- Entries your firmware defines can be changed and **reset to default** (the arrow button). That
+  erases the stored copy, so the default from the code applies right away and also follows a
+  changed default in a later firmware. At the default, the button is greyed out.
+- Entries no firmware defines (left over from an older firmware, or added here) can be changed
+  and **deleted** (the bin).
+- **Add** creates an entry in one of your areas or in a new one, as a whole number, decimal
+  number, on/off or text. A later firmware reads it if it defines the same name and type in the
+  same area. The library's own area takes no new entries.
+- Secrets never reach the browser: the WiFi and access point passwords, everything declared with
+  `Page::password()`, and keys you mark with `settings.markSecret("key")`. They can only be
+  overwritten or reset.
+- Library entries that decide whether the device stays reachable (WiFi name and password, device
+  name, IP settings) ask for confirmation first, and take effect after a restart.
+
+### Setup access point
+
+The device can open its own WiFi network (named after the device, settings page at
+`http://192.168.4.1/settings`):
+
+| Mode | At start-up | While running |
+|---|---|---|
+| Never | Only while no WiFi is stored | Never |
+| Only on WiFi failure (default) | No WiFi stored, or joining fails | After WiFi has been lost for the grace period (2 minutes) |
+| Always | Always | Always open |
+
+In every mode the access point closes after the timeout once nobody has been connected to it
+for that long (off by default), and it stays open as long as somebody is connected. Opened
+because of a WiFi failure, it closes as soon as WiFi is back. After the timeout closed it, it
+opens again only once WiFi was back and is lost again.
+
+The `ap*` fields of `pu::Config` are the defaults for every device running the firmware. Each
+device can change them on its settings page; "Use firmware defaults" goes back to the values in
+the code, which then also follow future firmware updates. `apLocked = true` shows them there
+read-only instead.
 
 ### Your own home page
 
@@ -168,7 +220,9 @@ ProjectUtils.server().on("/led/toggle", HTTP_POST, onToggle); // your own route
 ```
 
 `app.js` provides `pu.get(path)`, `pu.post(path, params)`, `pu.el(tag, props, ...children)`,
-`pu.icon(name)` and `pu.toast(text, isError)`. `app.css` has the building blocks of the built-in
+`pu.icon(name)`, `pu.toast(text, isError)` and `pu.wrapToggle(checkbox, element)` (the
+remembered "Wrap lines" switch of the console). `<body class="wide">` lets a page use the full
+window width. `app.css` has the building blocks of the built-in
 pages: `.content` (the page column), `.group` with an `.eyebrow` heading, `.panel` with `.row`s,
 `.tiles` with `.tile`s, `.card`, and buttons (`primary`, `red`). Use `addMenuLink("Title", "/path")` to list a route you serve
 entirely yourself.
@@ -181,9 +235,11 @@ Everything is set through `pu::Config` before calling `begin()`.
 |---|---|---|
 | `deviceName` | `"ESP32 Device"` | Default name; the user can change it on the settings page |
 | `firmwareVersion` | `{0, 0, 0}` | Version of your firmware, compared against GitHub releases |
-| `apMode` | `ApMode::OnFailure` | `OnFailure`: access point only if WiFi is unconfigured or unreachable. `Always`: keep it open |
-| `apPassword` | empty | Password of the setup access point (at least 8 characters). Empty = open |
-| `apTimeoutMs` | `0` | Close the access point after this time if nobody uses it. `0` = never |
+| `apMode` | `ApMode::OnFailure` | `Never`, `OnFailure` or `Always`, see [Setup access point](#setup-access-point) |
+| `apPassword` | empty | Password of the setup access point (8 to 63 characters). Empty = open |
+| `apTimeoutMs` | `0` | Close the access point once nobody has used it this long. `0` = never |
+| `apGraceMs` | `120000` | `OnFailure`: open the access point after WiFi has been lost this long |
+| `apLocked` | `false` | `true`: the `ap*` values cannot be changed on the settings page |
 | `wifiConnectTimeoutMs` | `10000` | How long `begin()` waits for the WiFi connection |
 | `adminUser` / `adminPassword` | `"admin"` / empty | See [Security](#security) |
 | `timezone` | Central Europe | POSIX TZ string, e.g. `"EST5EDT,M3.2.0,M11.1.0"` |
@@ -237,7 +293,8 @@ appSettings.set("factor", 2.5f, false);          // RAM only; persist later with
 ```
 
 Types: `int`, `float`, `double`, `bool`, `String`, and raw bytes via `defineBlob` / `setBlob` /
-`getBlob`. Getters return the value, or the given fallback if the key is unknown or has another
+`getBlob`. `reset("key")` erases the stored value so the default applies again;
+`markSecret("key")` hides the value on the memory page. Getters return the value, or the given fallback if the key is unknown or has another
 type (which is also logged). `ProjectUtils.settings()` holds the library's own settings.
 
 ### Console
@@ -308,7 +365,8 @@ Used by the pages; requires the admin password if one is set.
 | `GET /api/pu/info` | Chip, memory, uptime, network details as JSON |
 | `GET /api/pu/log` | RAM log as text |
 | `GET /api/pu/nav` | Menu entries |
-| `POST /api/pu/settings` | Form fields `deviceName`, `ssid`, `pass`, `ip`, `gateway`, `clearPass`; restarts the device |
+| `POST /api/pu/settings` | Form fields `deviceName`, `ssid`, `pass`, `clearPass`; `staticIP`, `ip`, `subnet`, `gateway`, `dns1`, `dns2`; `apMode`, `apTimeout`, `apGrace` (seconds), `apPassMode`, `apPass`. Restarts the device |
+| `POST /api/pu/network/confirm`, `POST /api/pu/network/revert` | Keep or undo a new static IP address while it is being tried out |
 | `POST /api/pu/wifi/scan`, `GET /api/pu/wifi/scan` | Start a network search; read its result |
 | `POST /api/pu/update/upload?type=firmware\|filesystem` | Upload and install a file (multipart form). Optional `size`, `md5` |
 | `POST /api/pu/autoupdates` | `enabled=true\|false` |
@@ -317,6 +375,10 @@ Used by the pages; requires the admin password if one is set.
 | `POST /api/pu/restart` | Restart the device |
 | `GET /api/pu/page?path=/`, `GET /api/pu/page/values?path=/` | Layout and current values of a page declared in C++ |
 | `POST /api/pu/page/widget` | `path`, `widget` (position), `action` (`set`, `click`, `press`, `hold`, `release`), `value` |
+| `GET /api/pu/memory` | All areas and entries with type, value, default, stored/defined (no secret values) |
+| `POST /api/pu/memory/set` | `area`, `key`, `value` |
+| `POST /api/pu/memory/reset` | `area`, `key`: back to the default, or deleted if the firmware does not define it |
+| `POST /api/pu/memory/add` | `area`, `key`, `type` (`int`, `float`, `bool`, `text`), `value` |
 | `/api/pu/console/ws` | Console websocket (text lines); `GET /api/pu/console/token` returns the token a browser passes as `?token=` |
 
 ## Migrating from v1
@@ -348,7 +410,7 @@ with a v2-based firmware.
 
 | v1 macro | v2 `Config` field |
 |---|---|
-| `SYS_CONTROL_STAT_IP` | Removed. A static IP is used whenever one is entered on the settings page |
+| `SYS_CONTROL_STAT_IP` | Removed. "Static IP address" on the settings page |
 | `SYS_CONTROL_WEBSERIAL` | `enableConsole` (on by default) |
 | `AP_PASSWORD` | `apPassword` |
 | `AP_VERBOSITY` 1 / 2 | `apMode = ApMode::OnFailure` / `ApMode::Always` |

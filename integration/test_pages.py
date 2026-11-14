@@ -6,7 +6,7 @@ import time
 
 import pytest
 
-BUILT_IN = ["/settings", "/update", "/console", "/info"]
+BUILT_IN = ["/settings", "/update", "/console", "/memory", "/info"]
 
 
 @pytest.mark.parametrize("path", ["/", "/about", *BUILT_IN])

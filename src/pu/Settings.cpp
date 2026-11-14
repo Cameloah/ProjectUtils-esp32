@@ -10,7 +10,43 @@ namespace pu {
 namespace {
 const size_t kMaxKeyLength = 15; // NVS limit for keys and namespace names
 using Lock = std::lock_guard<std::mutex>;
+
+std::mutex& registryMutex() {
+    static std::mutex mutex;
+    return mutex;
+}
+
+std::vector<Settings*>& registry() {
+    static std::vector<Settings*> started;
+    return started;
+}
 } // namespace
+
+Settings::~Settings() {
+    std::lock_guard<std::mutex> lock(registryMutex());
+    std::vector<Settings*>& started = registry();
+    for (auto it = started.begin(); it != started.end(); ++it) {
+        if (*it == this) {
+            started.erase(it);
+            break;
+        }
+    }
+}
+
+std::vector<Settings*> Settings::all() {
+    std::lock_guard<std::mutex> lock(registryMutex());
+    return registry();
+}
+
+Settings* Settings::forNamespace(const char* nvsNamespace) {
+    std::lock_guard<std::mutex> lock(registryMutex());
+    for (Settings* settings : registry()) {
+        if (settings->namespace_ == nvsNamespace) {
+            return settings;
+        }
+    }
+    return nullptr;
+}
 
 esp_err_t Settings::begin(const char* nvsNamespace, RamLog* log) {
     Lock lock(mutex_);
@@ -21,6 +57,16 @@ esp_err_t Settings::begin(const char* nvsNamespace, RamLog* log) {
         return ESP_ERR_INVALID_ARG;
     }
     namespace_ = nvsNamespace;
+    {
+        std::lock_guard<std::mutex> registryLock(registryMutex());
+        bool known = false;
+        for (const Settings* settings : registry()) {
+            known = known || settings == this;
+        }
+        if (!known) {
+            registry().push_back(this);
+        }
+    }
     // Safe to call repeatedly; the Arduino core has usually initialised NVS already.
     const esp_err_t error = nvs_flash_init();
     if (error != ESP_OK) {
@@ -100,6 +146,12 @@ void Settings::report(const char* action, const char* key, esp_err_t error) cons
     }
 }
 
+void Settings::keepDefault(Entry& entry) {
+    entry.defaultNumber = entry.number;
+    entry.defaultText = entry.text;
+    entry.defaultBlob = entry.blob;
+}
+
 // ---------- define ----------
 
 esp_err_t Settings::define(const char* key, int value) {
@@ -109,6 +161,7 @@ esp_err_t Settings::define(const char* key, int value) {
         return ESP_ERR_INVALID_ARG;
     }
     entry->number.asInt = value;
+    keepDefault(*entry);
     return ESP_OK;
 }
 
@@ -119,6 +172,7 @@ esp_err_t Settings::define(const char* key, float value) {
         return ESP_ERR_INVALID_ARG;
     }
     entry->number.asFloat = value;
+    keepDefault(*entry);
     return ESP_OK;
 }
 
@@ -129,6 +183,7 @@ esp_err_t Settings::define(const char* key, double value) {
         return ESP_ERR_INVALID_ARG;
     }
     entry->number.asDouble = value;
+    keepDefault(*entry);
     return ESP_OK;
 }
 
@@ -139,6 +194,7 @@ esp_err_t Settings::define(const char* key, bool value) {
         return ESP_ERR_INVALID_ARG;
     }
     entry->number.asBool = value;
+    keepDefault(*entry);
     return ESP_OK;
 }
 
@@ -153,6 +209,7 @@ esp_err_t Settings::define(const char* key, const String& value) {
         return ESP_ERR_INVALID_ARG;
     }
     entry->text = value;
+    keepDefault(*entry);
     return ESP_OK;
 }
 
@@ -165,6 +222,7 @@ esp_err_t Settings::defineBlob(const char* key, const uint8_t* data, size_t size
     if (data != nullptr) {
         entry->blob.assign(data, data + size);
     }
+    keepDefault(*entry);
     return ESP_OK;
 }
 
@@ -302,6 +360,89 @@ esp_err_t Settings::setBlob(const char* key, const uint8_t* data, size_t size, b
         entry->blob.assign(data, data + size);
     }
     return finishSet(*entry, persist);
+}
+
+// ---------- reset, secrets, listing ----------
+
+esp_err_t Settings::reset(const char* key) {
+    Lock lock(mutex_);
+    Entry* entry = find(key);
+    if (entry == nullptr) {
+        report("reset", key, ESP_ERR_NOT_FOUND);
+        return ESP_ERR_NOT_FOUND;
+    }
+    nvs_handle_t handle = 0;
+    esp_err_t error = nvs_open(namespace_.c_str(), NVS_READWRITE, &handle);
+    if (error == ESP_OK) {
+        error = nvs_erase_key(handle, key);
+        if (error == ESP_ERR_NVS_NOT_FOUND) {
+            error = ESP_OK; // nothing stored: already at the default
+        }
+        if (error == ESP_OK) {
+            error = nvs_commit(handle);
+        }
+        nvs_close(handle);
+    }
+    if (error != ESP_OK) {
+        report("reset", key, error);
+        return error;
+    }
+    entry->number = entry->defaultNumber;
+    entry->text = entry->defaultText;
+    entry->blob = entry->defaultBlob;
+    return ESP_OK;
+}
+
+void Settings::markSecret(const char* key) {
+    Lock lock(mutex_);
+    Entry* entry = find(key);
+    if (entry != nullptr) {
+        entry->secret = true;
+    }
+}
+
+bool Settings::isSecret(const char* key) const {
+    Lock lock(mutex_);
+    const Entry* entry = find(key);
+    return entry != nullptr && entry->secret;
+}
+
+void Settings::forEach(const std::function<void(const EntryView&)>& visit) const {
+    std::vector<EntryView> views;
+    {
+        Lock lock(mutex_);
+        for (const Entry& entry : entries_) {
+            EntryView view;
+            view.key = entry.key;
+            view.type = entry.type;
+            view.secret = entry.secret;
+            view.value = numberOf(entry.type, entry.number);
+            view.defaultValue = numberOf(entry.type, entry.defaultNumber);
+            view.text = entry.secret ? String() : entry.text;
+            view.defaultText = entry.secret ? String() : entry.defaultText;
+            view.textSet = !entry.text.isEmpty();
+            view.blob = entry.blob;
+            views.push_back(view);
+        }
+    }
+    for (const EntryView& view : views) { // outside the lock: visit may call back into us
+        visit(view);
+    }
+}
+
+double Settings::numberOf(Type type, const Number& number) {
+    switch (type) {
+    case Type::Int:
+        return number.asInt;
+    case Type::Float:
+        return number.asFloat;
+    case Type::Double:
+        return number.asDouble;
+    case Type::Bool:
+        return number.asBool ? 1.0 : 0.0;
+    default:
+        return 0.0;
+    }
 }
 
 // ---------- NVS access (caller holds the mutex) ----------

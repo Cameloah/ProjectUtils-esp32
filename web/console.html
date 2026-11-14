@@ -8,7 +8,7 @@
   <link rel="stylesheet" href="/pu/app.css">
   <script src="/pu/app.js"></script>
 </head>
-<body>
+<body class="wide fill">
 <h1>Console</h1>
 <p class="lede">Serial output of the device. Type to send a line.</p>
 <div class="content">
@@ -21,8 +21,9 @@
     </form>
   </div>
   <div class="toolbar">
-    <label><input type="checkbox" id="timestamps" checked> Timestamps</label>
-    <label><input type="checkbox" id="follow" checked> Follow output</label>
+    <label class="toggle"><span class="switch"><input type="checkbox" id="timestamps" checked><span></span></span> Timestamps</label>
+    <label class="toggle"><span class="switch"><input type="checkbox" id="follow" checked><span></span></span> Follow output</label>
+    <label class="toggle"><span class="switch"><input type="checkbox" id="wrap"><span></span></span> Wrap lines</label>
     <span class="muted" id="state">Connecting...</span>
     <span class="grow"></span>
     <button id="download">Download</button>
@@ -37,6 +38,7 @@
   const history = [];
   let historyIndex = 0;
   let socket = null;
+  pu.wrapToggle(byId("wrap"), output);
 
   function addLine(text, className) {
     const time = new Date().toTimeString().substring(0, 8);

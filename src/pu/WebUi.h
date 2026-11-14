@@ -9,6 +9,7 @@
 
 #include "Config.h"
 #include "LineQueue.h"
+#include "Memory.h"
 #include "Page.h"
 
 namespace pu {
@@ -19,6 +20,7 @@ class GithubUpdater;
 class RamLog;
 class Settings;
 class WifiManager;
+struct IpConfig;
 
 /// Web server with the built-in pages (settings, update, console, device info), their JSON
 /// API, and the project's own pages. All pages share one menu and one stylesheet.
@@ -73,10 +75,14 @@ class WebUi {
     void onConsoleEvent(AsyncWebSocketClient* client, AwsEventType type, void* arg, uint8_t* data,
                         size_t length);
 
+    void registerMemoryApi();
     void handleNav(AsyncWebServerRequest* request) const;
     void handleStatus(AsyncWebServerRequest* request) const;
     void handleInfo(AsyncWebServerRequest* request) const;
     void handleSettingsPost(AsyncWebServerRequest* request);
+    bool arrivedViaAp(AsyncWebServerRequest* request) const;
+    bool readIpConfig(AsyncWebServerRequest* request, IpConfig& out, String& error) const;
+    bool saveApSettings(AsyncWebServerRequest* request, String& error);
     void handleAutoUpdatesPost(AsyncWebServerRequest* request);
     void handleInstallPost(AsyncWebServerRequest* request);
     void handleScanGet(AsyncWebServerRequest* request) const;
@@ -93,6 +99,7 @@ class WebUi {
     Console* console_ = nullptr;
     Clock* clock_ = nullptr;
 
+    Memory memory_;
     std::deque<Page> pages_; // deque: references handed out by page() stay valid
     std::vector<MenuEntry> menu_;
     uint32_t sketchSize_ = 0;

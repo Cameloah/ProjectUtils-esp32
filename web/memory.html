@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Memory</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/pu/app.css">
+  <script src="/pu/app.js"></script>
+</head>
+<body>
+<h1>Memory</h1>
+<p class="lede">Values stored in the device's flash. They survive restarts and firmware updates.</p>
+<div class="content">
+  <div class="tiles">
+    <div class="tile"><span class="label">Entries in this firmware's areas</span><strong id="count">-</strong></div>
+    <div class="tile"><span class="label">Flash for stored values</span><strong><span id="usage">-</span><i>% used</i></strong>
+      <div class="meter" style="margin-top: 10px"><i id="usageBar"></i></div></div>
+  </div>
+  <div class="toolbar">
+    <input type="search" class="grow" id="filter" placeholder="Filter by name or value" aria-label="Filter entries">
+    <label class="toggle"><span class="switch"><input type="checkbox" id="showLibrary"><span></span></span> Show library entries</label>
+  </div>
+  <div class="stack" id="areas"></div>
+
+  <div class="group">
+    <p class="eyebrow">Add an entry</p>
+    <div class="panel">
+      <div class="grid-add">
+        <label>Area<select id="addArea"></select></label>
+        <label id="newAreaBox" hidden>New area name<input type="text" class="data" id="newArea" maxlength="15"
+          placeholder="up to 15 characters" autocapitalize="off" spellcheck="false"></label>
+        <label>Name<input type="text" class="data" id="addKey" maxlength="15" placeholder="up to 15 characters"
+          autocapitalize="off" spellcheck="false"></label>
+        <label>Type<select id="addType">
+          <option value="int">Whole number (int)</option>
+          <option value="float">Decimal number (float)</option>
+          <option value="bool">On / off (bool)</option>
+          <option value="text" selected>Text</option>
+        </select></label>
+        <label id="addValueBox">Value<input type="text" class="data" id="addValue" autocapitalize="off" spellcheck="false"></label>
+        <label id="addFlagBox" hidden>Value<span class="switch"><input type="checkbox" id="addFlag" aria-label="Value"><span></span></span></label>
+      </div>
+      <div class="phase">A firmware reads the entry only if it defines the same name with the same type
+        in the same area. Names: letters, digits, - _ and . only.</div>
+      <div class="actions"><button class="primary" id="add">Add</button></div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const byId = (id) => document.getElementById(id);
+  let data = null;
+  // Changing these can make the device unreachable or move it to another address.
+  const risky = {
+    ssid: "The device joins this WiFi network after the next restart. With a wrong name it cannot be reached and opens its access point.",
+    password: "The device uses this WiFi password after the next restart. If it is wrong, the device cannot be reached and opens its access point.",
+    deviceName: "The device's name and its .local address change after the next restart.",
+    ipMode: "Switches between automatic and static IP address after the next restart, without the confirmation of the settings page.",
+    localIP: "The device's static IP address changes after the next restart, without the confirmation of the settings page.",
+    gateway: "A wrong gateway can make the device unreachable after the next restart.",
+    subnet: "A wrong subnet mask can make the device unreachable after the next restart.",
+  };
+  const typeLabel = { int: "int", float: "float", double: "double", bool: "bool", text: "text", blob: "data", other: "other" };
+
+  function load() {
+    return pu.get("/api/pu/memory").then((result) => { result.drawn = data !== null; data = result; draw(); })
+      .catch((error) => pu.toast(error.message, true));
+  }
+
+  const areaTitle = (area) => (area.library ? "ProjectUtils library" : area.name);
+  const shown = (value) => (value === "" ? "empty" : String(value));
+
+  function iconButton(name, title) {
+    const button = pu.el("button", { type: "button", className: "iconbtn", title, ariaLabel: title }, pu.icon(name));
+    return button;
+  }
+
+  function send(path, params, done) {
+    return pu.post(path, params).then((result) => { pu.toast(params.key + ": " + result.message); return load(); })
+      .then(done).catch((error) => pu.toast(params.key + ": " + error.message, true));
+  }
+
+  // Runs `action` straight away, or after an inline confirmation for entries that matter for
+  // reaching the device.
+  function confirmFirst(area, entry, row, verb, action) {
+    const warning = area.library ? risky[entry.key] : null;
+    if (!warning) {
+      action();
+      return;
+    }
+    const box = pu.el("div", { className: "confirm" }, pu.el("span", null, warning),
+      pu.el("span", { className: "control" },
+        pu.el("button", { type: "button", className: "red solid", onclick: action }, verb),
+        pu.el("button", { type: "button", onclick: () => box.remove() }, "Cancel")));
+    row.querySelector(".confirm")?.remove();
+    row.append(box);
+  }
+
+  function editor(area, entry, row) {
+    const params = (value) => ({ area: area.name, key: entry.key, value });
+    if (!entry.editable) {
+      const text = entry.type === "blob" ? entry.size + " bytes" + (entry.value ? " · " + entry.value : "")
+        : entry.value === null || entry.value === undefined ? "" : String(entry.value);
+      return pu.el("span", { className: "blob data", title: text }, text);
+    }
+    if (entry.type === "bool") {
+      const box = pu.el("input", { type: "checkbox", checked: entry.value, ariaLabel: entry.key });
+      box.addEventListener("change", () => {
+        confirmFirst(area, entry, row, "Change", () => send("/api/pu/memory/set", params(String(box.checked))));
+      });
+      return pu.el("label", { className: "switch" }, box, pu.el("span"));
+    }
+    const numeric = entry.type !== "text";
+    const input = pu.el("input", {
+      type: entry.secret ? "password" : "text",
+      className: "data" + (numeric ? " num" : ""),
+      value: entry.secret ? "" : String(entry.value),
+      placeholder: entry.secret ? (entry.set ? "set, hidden" : "not set") : "",
+      inputMode: entry.type === "int" ? "numeric" : numeric ? "decimal" : "text",
+      autocomplete: "off",
+      ariaLabel: entry.key,
+    });
+    const save = pu.el("button", { type: "button", className: "primary", hidden: true }, "Save");
+    input.addEventListener("input", () => {
+      save.hidden = false;
+      row.classList.add("changed");
+    });
+    const submit = () => confirmFirst(area, entry, row, "Save", () => send("/api/pu/memory/set", params(input.value)));
+    save.addEventListener("click", submit);
+    input.addEventListener("keydown", (event) => { if (event.key === "Enter") { submit(); } });
+    return pu.el("span", { className: "control" }, input, save);
+  }
+
+  function entryRow(area, entry) {
+    const row = pu.el("div", { className: "entry" + (entry.defined ? "" : " orphan") });
+    const meta = pu.el("div", { className: "meta" }, pu.el("span", { className: "tag data" }, typeLabel[entry.type] || entry.type));
+    if (entry.secret) {
+      meta.append(pu.el("span", { className: "tag secret" }, "secret"));
+    }
+    if (!entry.defined) {
+      meta.append(pu.el("span", { className: "tag warn" }, "not used by this firmware"));
+    } else if (!entry.stored) {
+      meta.append(pu.el("span", { className: "tag" }, "default"));
+    } else if (!entry.secret && "default" in entry && entry.type !== "blob" && entry.value !== entry.default) {
+      meta.append(pu.el("span", { className: "tag" }, "default " + shown(entry.default)));
+    }
+
+    let button;
+    if (entry.defined) {
+      const atDefault = !entry.stored || (entry.secret ? !entry.set : entry.value === entry.default);
+      button = iconButton("reset", atDefault ? "Already at its default" : "Reset to default");
+      button.disabled = atDefault;
+      button.addEventListener("click", () => confirmFirst(area, entry, row, "Reset",
+        () => send("/api/pu/memory/reset", { area: area.name, key: entry.key })));
+    } else {
+      button = iconButton("trash", "Delete");
+      button.classList.add("delete");
+      button.addEventListener("click", () => send("/api/pu/memory/reset", { area: area.name, key: entry.key }));
+    }
+    row.append(pu.el("div", null, pu.el("div", { className: "key" }, entry.key), meta),
+      pu.el("div", { className: "edit" }, editor(area, entry, row), button));
+    return row;
+  }
+
+  function matches(entry, filter) {
+    if (!filter) {
+      return true;
+    }
+    const value = entry.secret ? "" : String(entry.value ?? "");
+    return entry.key.toLowerCase().includes(filter) || value.toLowerCase().includes(filter);
+  }
+
+  function draw() {
+    const filter = byId("filter").value.trim().toLowerCase();
+    const showLibrary = byId("showLibrary").checked;
+    let count = 0;
+    const groups = data.areas.filter((area) => showLibrary || !area.library).map((area) => {
+      const panel = pu.el("div", { className: "panel" });
+      area.entries.filter((entry) => matches(entry, filter)).forEach((entry) => panel.append(entryRow(area, entry)));
+      if (panel.childElementCount === 0) {
+        panel.append(pu.el("div", { className: "row muted" }, area.entries.length ? "No matching entries." : "Nothing stored yet."));
+      }
+      const head = pu.el("div", { className: "ns" }, pu.el("p", { className: "eyebrow" }, areaTitle(area)),
+        pu.el("small", { className: "data" }, area.library ? area.name + " · changes apply after a restart" : ""));
+      return pu.el("div", { className: "group" }, head, panel);
+    });
+    data.areas.forEach((area) => { count += area.entries.filter((entry) => entry.stored).length; });
+    byId("areas").replaceChildren(...groups);
+    byId("count").textContent = count;
+    if (data.total) {
+      const percent = Math.round(100 * data.used / data.total);
+      byId("usage").textContent = percent;
+      byId("usageBar").style.width = percent + "%";
+    }
+    // areas new entries may go to: all but the library's own, or a new one
+    const chosen = byId("addArea").value;
+    const areas = data.areas.filter((area) => !area.library);
+    byId("addArea").replaceChildren(...areas.map((area) => pu.el("option", { value: area.name }, area.name)),
+      pu.el("option", { value: "" }, "New area..."));
+    // the first time "" means nothing chosen yet, later it means "New area..."
+    const known = (data.drawn || chosen !== "") && [...byId("addArea").options].some((option) => option.value === chosen);
+    data.drawn = true;
+    byId("addArea").value = known ? chosen : areas.length > 0 ? areas[0].name : "";
+    updateAddForm();
+  }
+
+  function updateAddForm() {
+    byId("newAreaBox").hidden = byId("addArea").value !== "";
+    const isBool = byId("addType").value === "bool";
+    byId("addValueBox").hidden = isBool;
+    byId("addFlagBox").hidden = !isBool;
+  }
+
+  byId("filter").addEventListener("input", () => data && draw());
+  byId("showLibrary").addEventListener("change", (event) => {
+    pu.remember("memoryLibrary", false, event.target.checked);
+    if (data) { draw(); }
+  });
+  byId("showLibrary").checked = pu.remember("memoryLibrary", false);
+  byId("addArea").addEventListener("change", updateAddForm);
+  byId("addType").addEventListener("change", updateAddForm);
+
+  byId("add").addEventListener("click", () => {
+    const area = byId("addArea").value || byId("newArea").value.trim();
+    const type = byId("addType").value;
+    const params = {
+      area,
+      key: byId("addKey").value.trim(),
+      type,
+      value: type === "bool" ? String(byId("addFlag").checked) : byId("addValue").value,
+    };
+    send("/api/pu/memory/add", params, () => {
+      byId("addKey").value = "";
+      byId("addValue").value = "";
+      byId("newArea").value = "";
+      if (!byId("addArea").value) {
+        byId("addArea").value = area;
+        updateAddForm();
+      }
+    });
+  });
+
+  load();
+</script>
+</body>
+</html>

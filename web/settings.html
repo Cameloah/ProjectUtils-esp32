@@ -12,6 +12,21 @@
 <h1>Settings</h1>
 <p class="lede">Name and network of this device.</p>
 <form class="content" id="settingsForm">
+  <div class="panel notice" id="trial" hidden>
+    <div class="row">
+      <span class="label"><b>New address active</b>
+        <small>Keep it, or the device goes back to the previous address settings in <span id="trialLeft" class="data"></span>.</small></span>
+      <span class="control">
+        <button type="button" class="primary" id="keep">Keep</button>
+        <button type="button" id="revert">Go back</button>
+      </span>
+    </div>
+  </div>
+  <div class="panel notice warn" id="reverted" hidden>
+    <div class="row"><span class="label"><b>Address settings reverted</b>
+      <small>The new address was not confirmed in time, so the previous settings are back.</small></span></div>
+  </div>
+
   <div class="group">
     <p class="eyebrow">General</p>
     <div class="panel">
@@ -38,42 +53,226 @@
         <span class="label">Open network<small>The network needs no password</small></span>
         <label class="switch"><input type="checkbox" id="clearPass" aria-label="Open network"><span></span></label>
       </div>
-      <details>
-        <summary>Fixed IP address</summary>
+      <div class="actions"><button type="button" id="scan">Search for networks</button></div>
+    </div>
+  </div>
+
+  <div class="group">
+    <p class="eyebrow">IP address</p>
+    <div class="panel">
+      <div class="row">
+        <span class="label">Static IP address<small id="ipSummary">Assigned by the router (DHCP)</small></span>
+        <label class="switch"><input type="checkbox" id="staticIP" aria-label="Static IP address"><span></span></label>
+      </div>
+      <div class="rows" id="ipFields" hidden>
         <div class="row">
           <label class="label" for="ip">IP address</label>
-          <div class="control"><input type="text" class="data" id="ip" name="ip" placeholder="automatic (DHCP)"></div>
+          <div class="control"><input type="text" class="data" id="ip" name="ip" inputmode="decimal"></div>
         </div>
         <div class="row">
-          <label class="label" for="gateway">Gateway</label>
-          <div class="control"><input type="text" class="data" id="gateway" name="gateway"></div>
+          <label class="label" for="subnet">Subnet mask</label>
+          <div class="control"><input type="text" class="data" id="subnet" name="subnet" inputmode="decimal"></div>
         </div>
-      </details>
+        <div class="row">
+          <label class="label" for="gateway">Gateway<small>Usually the router</small></label>
+          <div class="control"><input type="text" class="data" id="gateway" name="gateway" inputmode="decimal"></div>
+        </div>
+        <div class="row">
+          <label class="label" for="dns1">DNS server<small>Empty: the gateway</small></label>
+          <div class="control"><input type="text" class="data" id="dns1" name="dns1" inputmode="decimal"></div>
+        </div>
+        <div class="row">
+          <label class="label" for="dns2">Second DNS server</label>
+          <div class="control"><input type="text" class="data" id="dns2" name="dns2" inputmode="decimal"></div>
+        </div>
+        <div class="phase" id="ipNote">After saving, the device restarts at the new address and this page follows it.
+          Confirm there within two minutes, otherwise the device goes back to the previous settings.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="group" id="apGroup">
+    <p class="eyebrow">Access point</p>
+    <div class="panel">
+      <div class="phase" id="apIntro" style="padding-top: 14px">The device's own WiFi network for setting it up.
+        The name is the device name, the settings are at 192.168.4.1.</div>
+      <div class="row">
+        <label class="label" for="apMode">Open the access point</label>
+        <div class="control"><select class="wide" id="apMode"></select></div>
+      </div>
+      <div class="row" id="apGraceRow">
+        <label class="label" for="apGrace">Open after WiFi is lost for<small id="apGraceHint"></small></label>
+        <div class="control"><input type="number" id="apGrace" min="1" step="1"><span class="unit">min</span></div>
+      </div>
+      <div class="row">
+        <label class="label" for="apTimeout">Close when unused for<small id="apTimeoutHint"></small></label>
+        <div class="control"><input type="number" id="apTimeout" min="0" step="1"><span class="unit">min</span></div>
+      </div>
+      <div class="row">
+        <label class="label" for="apPassMode">Password</label>
+        <div class="control"><select class="wide" id="apPassMode"></select></div>
+      </div>
+      <div class="row" id="apPassRow" hidden>
+        <label class="label" for="apPass">Access point password<small>8 to 63 characters</small></label>
+        <div class="control"><input type="password" id="apPass" maxlength="63" autocomplete="new-password"></div>
+      </div>
+      <div class="actions" id="apActions"><button type="button" id="apReset">Use firmware defaults</button></div>
     </div>
   </div>
 
   <div class="control">
     <button type="submit" class="primary">Save and restart</button>
-    <button type="button" id="scan">Search for networks</button>
   </div>
   <p class="muted" id="formMessage"></p>
 </form>
 
 <script>
   const byId = (id) => document.getElementById(id);
+  const params = new URLSearchParams(location.search);
+  const origin = (host) => location.protocol + "//" + host; // the device's other addresses
+  let status = null;
   let connectedTo = "";
 
-  pu.get("/api/pu/status").then((status) => {
+  const modeText = { never: "Never (only without WiFi)", failure: "On WiFi failure", always: "Always" };
+  const minutes = (seconds) => {
+    const value = seconds / 60;
+    return Number.isInteger(value) ? String(value) : value.toFixed(1);
+  };
+  const duration = (seconds) => (seconds === 0 ? "never" : minutes(seconds) + " min");
+
+  pu.get("/api/pu/status").then((result) => {
+    status = result;
     byId("deviceName").value = status.deviceName;
     byId("ssid").value = status.wifi.ssid;
     byId("pass").placeholder = status.wifi.passwordSet ? "unchanged" : "";
-    byId("ip").value = status.wifi.localIP;
-    byId("gateway").value = status.wifi.gateway;
     connectedTo = status.wifi.connected ? status.wifi.ssid : "";
+    showAddress(status.address);
+    showAccessPoint(status.ap);
   }).catch((error) => pu.toast(error.message, true));
 
   byId("clearPass").addEventListener("change", (event) => {
     byId("pass").disabled = event.target.checked;
+  });
+
+  // ---- IP address ----
+  function showAddress(address) {
+    const saved = address.saved;
+    const current = address.current;
+    const connected = status.wifi.connected;
+    byId("staticIP").checked = address.static;
+    // static values that were never set start from what the router handed out
+    const fill = (id, value, fallback) => { byId(id).value = value || (connected ? fallback : ""); };
+    fill("ip", address.static ? saved.ip : "", current.ip);
+    fill("subnet", address.static ? saved.subnet : "", current.subnet);
+    fill("gateway", address.static ? saved.gateway : "", current.gateway);
+    fill("dns1", address.static ? saved.dns1 : "", current.dns1);
+    fill("dns2", address.static ? saved.dns2 : "", current.dns2 === "0.0.0.0" ? "" : current.dns2);
+    if (status.wifi.viaAp) {
+      byId("ipNote").textContent = "You are connected through the device's access point, so the new address " +
+        "cannot be tried out from here. It is used right away; check that the device is reachable.";
+    }
+    updateIpFields();
+    byId("reverted").hidden = !address.reverted;
+    if (address.trialSeconds > 0) {
+      startTrialCountdown(address.trialSeconds);
+    }
+  }
+
+  function updateIpFields() {
+    const on = byId("staticIP").checked;
+    byId("ipFields").hidden = !on;
+    const current = status ? status.address.current.ip : "";
+    byId("ipSummary").textContent = on ? "Set by hand below"
+      : "Assigned by the router (DHCP)" + (status && status.wifi.connected ? ", now " + current : "");
+  }
+  byId("staticIP").addEventListener("change", updateIpFields);
+
+  function startTrialCountdown(seconds) {
+    const end = Date.now() + seconds * 1000;
+    byId("trial").hidden = false;
+    const tick = () => {
+      const left = Math.max(0, Math.round((end - Date.now()) / 1000));
+      byId("trialLeft").textContent = left + " s";
+      if (left > 0 && !byId("trial").hidden) {
+        setTimeout(tick, 1000);
+      }
+    };
+    tick();
+  }
+
+  byId("keep").addEventListener("click", () => {
+    pu.post("/api/pu/network/confirm").then((result) => {
+      byId("trial").hidden = true;
+      pu.toast(result.message);
+    }).catch((error) => pu.toast(error.message, true));
+  });
+
+  byId("revert").addEventListener("click", () => {
+    pu.post("/api/pu/network/revert").then((result) => {
+      byId("trial").hidden = true;
+      byId("formMessage").textContent = result.message;
+      const back = [params.get("from"), origin(status.hostname + ".local")].filter(Boolean);
+      pu.waitForRestart(back, "/settings");
+    }).catch((error) => pu.toast(error.message, true));
+  });
+
+  // ---- access point ----
+  function options(select, entries, value) {
+    select.replaceChildren(...entries.map(([key, text]) => pu.el("option", { value: key }, text)));
+    select.value = value;
+  }
+
+  function showAccessPoint(ap) {
+    const defaults = ap.defaults;
+    const own = ap.own;
+    if (ap.locked) {
+      const active = ap.active;
+      byId("apGroup").querySelector(".panel").replaceChildren(
+        pu.el("div", { className: "phase", style: "padding-top: 14px" }, "Fixed in the firmware of this device."),
+        pu.el("dl", { className: "kv" },
+          pu.el("dt", null, "Open"), pu.el("dd", null, modeText[active.mode]),
+          pu.el("dt", null, "Close when unused for"), pu.el("dd", null, duration(active.timeout)),
+          ...(active.mode === "failure"
+            ? [pu.el("dt", null, "Open after WiFi is lost for"), pu.el("dd", null, duration(active.grace))] : []),
+          pu.el("dt", null, "Password"), pu.el("dd", null, active.passwordSet ? "set" : "none (open network)")));
+      return;
+    }
+    options(byId("apMode"), [
+      ["default", "Default: " + modeText[defaults.mode]],
+      ["never", modeText.never], ["failure", modeText.failure], ["always", modeText.always]], own.mode);
+    byId("apTimeout").placeholder = minutes(defaults.timeout);
+    byId("apTimeout").value = own.timeout >= 0 ? minutes(own.timeout) : "";
+    byId("apTimeoutHint").textContent = "Empty: firmware default (" + duration(defaults.timeout) + "). 0: never";
+    byId("apGrace").placeholder = minutes(defaults.grace);
+    byId("apGrace").value = own.grace >= 0 ? minutes(own.grace) : "";
+    byId("apGraceHint").textContent = "Empty: firmware default (" + duration(defaults.grace) + ")";
+    options(byId("apPassMode"), [
+      ["default", "Default: " + (defaults.passwordSet ? "set" : "none")],
+      ["open", "None (open network)"], ["custom", "Own password"]], own.password);
+    byId("apPass").placeholder = own.password === "custom" ? "unchanged" : "";
+    updateApFields();
+  }
+
+  function updateApFields() {
+    if (!status || status.ap.locked) {
+      return;
+    }
+    const chosen = byId("apMode").value;
+    const mode = chosen === "default" ? status.ap.defaults.mode : chosen;
+    byId("apGraceRow").hidden = mode !== "failure";
+    byId("apPassRow").hidden = byId("apPassMode").value !== "custom";
+  }
+  byId("apMode").addEventListener("change", updateApFields);
+  byId("apPassMode").addEventListener("change", updateApFields);
+
+  byId("apReset").addEventListener("click", () => {
+    byId("apMode").value = "default";
+    byId("apTimeout").value = "";
+    byId("apGrace").value = "";
+    byId("apPassMode").value = "default";
+    byId("apPass").value = "";
+    updateApFields();
+    pu.toast("Firmware defaults chosen. Save to apply them.");
   });
 
   // ---- network search ----
@@ -144,13 +343,38 @@
   // ---- save ----
   byId("settingsForm").addEventListener("submit", (event) => {
     event.preventDefault();
-    const params = new FormData(event.target);
+    const form = new FormData(event.target);
     if (byId("clearPass").checked) {
-      params.set("clearPass", "true");
+      form.set("clearPass", "true");
     }
-    pu.post("/api/pu/settings", params)
-      .then((result) => { byId("formMessage").textContent = result.message; pu.waitForRestart(); })
-      .catch((error) => { byId("formMessage").textContent = "Saving failed: " + error.message; });
+    form.set("staticIP", byId("staticIP").checked ? "true" : "false");
+    if (status && !status.ap.locked) {
+      const seconds = (id) => (byId(id).value === "" ? "" : String(Math.round(Number(byId(id).value) * 60)));
+      form.set("apMode", byId("apMode").value);
+      form.set("apTimeout", seconds("apTimeout"));
+      form.set("apGrace", seconds("apGrace"));
+      form.set("apPassMode", byId("apPassMode").value);
+      form.set("apPass", byId("apPass").value);
+    }
+    const wasStatic = status && status.address.static;
+    pu.post("/api/pu/settings", form).then((result) => {
+      byId("formMessage").textContent = result.message;
+      const home = origin(status.hostname + ".local");
+      if (result.trial) {
+        // the page moves to the new address; if that never answers, the device comes back here
+        const target = origin(result.address);
+        byId("formMessage").textContent = "Saved. The device restarts at " + result.address +
+          " and this page follows it. If it cannot be reached there, it goes back to the previous " +
+          "settings after " + Math.round(result.trialSeconds / 60) + " minutes and this page reloads here.";
+        pu.waitForRestart([target, location.origin], "/settings?from=" + encodeURIComponent(location.origin));
+      } else if (result.address) {
+        pu.waitForRestart([origin(result.address), location.origin, home], "/settings");
+      } else if (wasStatic) {
+        pu.waitForRestart([location.origin, home], "/settings"); // new address comes from the router
+      } else {
+        pu.waitForRestart();
+      }
+    }).catch((error) => { byId("formMessage").textContent = "Saving failed: " + error.message; });
   });
 </script>
 </body>
