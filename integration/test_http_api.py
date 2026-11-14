@@ -18,6 +18,9 @@ MUTATING = [
     "/api/pu/update/check",
     "/api/pu/update/install",
     "/api/pu/restart",
+    "/api/pu/memory/set",
+    "/api/pu/memory/reset",
+    "/api/pu/memory/add",
 ]
 PROTECTED_GET = [
     "/",
@@ -25,7 +28,9 @@ PROTECTED_GET = [
     "/settings",
     "/update",
     "/console",
+    "/memory",
     "/info",
+    "/api/pu/memory",
     "/api/pu/nav",
     "/api/pu/status",
     "/api/pu/info",
@@ -89,12 +94,61 @@ def test_state_changing_endpoints_refuse_get(device, path):
     assert device.get(path).status_code in {404, 405}
 
 
-def test_invalid_ip_is_rejected_and_nothing_is_saved(device):
+def _comparable(status: dict) -> dict:
+    status = dict(status)
+    status["address"] = {**status["address"], "current": None, "trialSeconds": None}
+    return status
+
+
+def _fixed(ip="192.168.1.20", subnet="255.255.255.0", gateway="192.168.1.1", **more) -> dict:
+    return {"staticIP": "true", "ip": ip, "subnet": subnet, "gateway": gateway, **more}
+
+
+@pytest.mark.parametrize(
+    "fields",
+    [
+        _fixed(ip="999.1.1"),
+        _fixed(subnet="255.0.255.0"),
+        _fixed(gateway="10.0.0.1"),
+        _fixed(ip="192.168.1.255"),
+        _fixed(dns1="dns.example"),
+        {"apMode": "sometimes", "apPassMode": "default"},
+        {"apMode": "always", "apTimeout": "-5", "apPassMode": "default"},
+        {"apMode": "always", "apGrace": "0", "apPassMode": "default"},
+        {"apMode": "always", "apPassMode": "custom", "apPass": "short"},
+        {"apMode": "always", "apPassMode": "secret"},
+    ],
+    ids=["bad-ip", "bad-mask", "gateway-elsewhere", "broadcast", "bad-dns", "bad-mode",
+         "negative-timeout", "zero-grace", "short-password", "bad-password-choice"],
+)  # fmt: skip
+def test_invalid_settings_are_rejected_and_nothing_is_saved(device, fields):
     before = device.status()
-    response = device.post("/api/pu/settings", {"deviceName": "must not be saved", "ip": "999.1.1"})
-    assert response.status_code == 400
+    response = device.post("/api/pu/settings", {"deviceName": "must not be saved", **fields})
+    assert response.status_code in {400, 403}
     assert response.json()["ok"] is False
-    assert device.status() == before
+    assert _comparable(device.status()) == _comparable(before)
+
+
+def test_status_describes_address_and_access_point(device):
+    status = device.status()
+    address = status["address"]
+    assert isinstance(address["static"], bool)
+    assert address["current"]["ip"] == status["wifi"]["ip"]
+    assert address["current"]["subnet"].count(".") == 3
+    assert address["trialSeconds"] == 0
+    ap = status["ap"]
+    assert ap["open"] is False
+    for values in (ap["active"], ap["defaults"]):
+        assert values["mode"] in {"never", "failure", "always"}
+        assert isinstance(values["passwordSet"], bool)
+        assert values["timeout"] >= 0 and values["grace"] >= 0
+        assert set(values) == {"mode", "timeout", "grace", "passwordSet"}  # never the password
+    assert ap["own"]["password"] in {"default", "open", "custom"}
+
+
+def test_confirm_and_revert_need_a_pending_address(device):
+    assert device.post("/api/pu/network/confirm").status_code == 409
+    assert device.post("/api/pu/network/revert").status_code == 409
 
 
 def test_autoupdates_needs_its_parameter(device):

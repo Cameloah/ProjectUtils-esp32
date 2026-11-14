@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 #include <esp_err.h>
+#include <functional>
 #include <mutex>
 #include <nvs.h>
 #include <vector>
@@ -18,6 +19,29 @@ class RamLog;
 class Settings {
   public:
     enum class Type : uint8_t { Int, Float, Double, String, Bool, Blob };
+
+    /// A copy of one defined entry, for listing (the memory page).
+    struct EntryView {
+        String key;
+        Type type = Type::Int;
+        bool secret = false;
+        double value = 0.0; ///< Int, Float, Double, Bool (0/1)
+        double defaultValue = 0.0;
+        String text; ///< String entries; empty for secrets
+        String defaultText;
+        bool textSet = false; ///< String entries: value not empty (also for secrets)
+        std::vector<uint8_t> blob;
+    };
+
+    Settings() = default;
+    ~Settings();
+    Settings(const Settings&) = delete;
+    Settings& operator=(const Settings&) = delete;
+
+    /// Every Settings object that was started with begin(), in that order.
+    static std::vector<Settings*> all();
+    /// The started Settings object using `nvsNamespace`, or nullptr.
+    static Settings* forNamespace(const char* nvsNamespace);
 
     /// nvsNamespace: at most 15 characters. log is optional.
     esp_err_t begin(const char* nvsNamespace, RamLog* log = nullptr);
@@ -52,6 +76,15 @@ class Settings {
     esp_err_t set(const char* key, const String& value, bool persist = true);
     esp_err_t setBlob(const char* key, const uint8_t* data, size_t size, bool persist = true);
 
+    /// Removes the stored value of `key` from flash; the default from define() applies again.
+    esp_err_t reset(const char* key);
+    /// Marks `key` as secret: the memory page never shows its value.
+    void markSecret(const char* key);
+    bool isSecret(const char* key) const;
+    /// Calls `visit` with a copy of every defined entry, in the order they were defined.
+    void forEach(const std::function<void(const EntryView&)>& visit) const;
+    const String& nvsNamespace() const { return namespace_; }
+
     esp_err_t save(const char* key);
     esp_err_t saveAll();
     esp_err_t load(const char* key);
@@ -59,18 +92,27 @@ class Settings {
     esp_err_t loadAll();
 
   private:
+    union Number {
+        int32_t asInt;
+        float asFloat;
+        double asDouble;
+        bool asBool;
+    };
+
     struct Entry {
         String key;
         Type type = Type::Int;
-        union {
-            int32_t asInt;
-            float asFloat;
-            double asDouble;
-            bool asBool;
-        } number = {0};
+        bool secret = false;
+        Number number = {0};
         String text;
         std::vector<uint8_t> blob;
+        Number defaultNumber = {0};
+        String defaultText;
+        std::vector<uint8_t> defaultBlob;
     };
+
+    static void keepDefault(Entry& entry);
+    static double numberOf(Type type, const Number& number);
 
     Entry* find(const char* key);
     const Entry* find(const char* key) const;

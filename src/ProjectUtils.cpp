@@ -1,5 +1,7 @@
 #include "ProjectUtils.h"
 
+#include "pu/Memory.h"
+
 // NOLINTNEXTLINE(readability-identifier-naming): Arduino-style global, like Serial or WiFi
 pu::ProjectUtilsClass ProjectUtils;
 
@@ -32,6 +34,7 @@ void ProjectUtilsClass::begin(const Config& config) {
 
     settings_.begin(kNvsNamespace, &log_);
     WifiManager::defineSettings(settings_);
+    Memory::defineSettings(settings_);
     settings_.define("autoUpdates", false);
     settings_.loadAll();
 

@@ -71,6 +71,10 @@ h2 { margin: 0 0 8px; font-size: 17px; }
 p { margin: 0 0 10px; }
 .lede { margin-top: 0; margin-bottom: 0; color: var(--muted); }
 .content { display: flex; flex-direction: column; gap: 22px; margin-top: 22px; }
+/* pages that use the whole width (console); "fill" also stretches the content to the screen bottom */
+body.wide > h1, body.wide > .lede, body.wide .content { max-width: none; margin-left: 0; margin-right: 0; }
+body.fill { height: 100vh; height: 100dvh; padding-bottom: 20px; display: flex; flex-direction: column; }
+body.fill .content { flex: 1; min-height: 0; }
 .muted { color: var(--muted); font-size: 12.5px; }
 .group { display: flex; flex-direction: column; gap: 8px; }
 .eyebrow { margin: 0 4px; font-size: 12px; font-weight: 650; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
@@ -123,7 +127,8 @@ p { margin: 0 0 10px; }
 .actions { display: flex; flex-wrap: wrap; gap: 10px; padding: 14px 16px; }
 .phase { display: grid; gap: 8px; padding: 0 16px 14px; color: var(--muted); font-size: 12.5px; }
 details > summary { padding: 14px 16px; cursor: pointer; color: var(--muted); font-weight: 550; }
-details .row:first-of-type { border-top: 1px solid var(--line); }
+details .row:first-of-type, .row + .rows > .row:first-child { border-top: 1px solid var(--line); }
+select.wide { width: 16rem; }
 
 .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
 .tile { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; min-width: 0; }
@@ -189,6 +194,8 @@ button.hold.active { background: var(--accent); color: var(--on-accent); border-
 button.net { width: 100%; height: auto; border: 0; border-radius: 0; background: none; font-weight: 400; text-align: left; }
 button.net:hover { background: var(--raised); }
 button.net.chosen .label { color: var(--accent); font-weight: 600; }
+.notice { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); background: color-mix(in srgb, var(--accent) 7%, var(--surface)); }
+.notice.warn { border-color: color-mix(in srgb, var(--warn) 50%, var(--line)); background: color-mix(in srgb, var(--warn) 8%, var(--surface)); }
 .tag { font-size: 12px; color: var(--muted); border: 1px solid var(--line); border-radius: 20px; padding: 2px 8px; }
 .tag.good { color: var(--good); border-color: color-mix(in srgb, var(--good) 40%, var(--line)); }
 .tag.warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 40%, var(--line)); }
@@ -200,19 +207,54 @@ button.net.chosen .label { color: var(--accent); font-weight: 600; }
 
 /* ---------- console, log, key-value list ---------- */
 .term { background: var(--term-bg); color: var(--term-ink); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
-.term .terminal { height: min(52vh, 420px); padding: 14px 16px; overflow-y: auto; font: 13px/1.5 var(--font-data); white-space: pre-wrap; word-break: break-word; }
+.term .terminal { height: min(52vh, 420px); padding: 14px 16px; overflow: auto; font: 13px/1.5 var(--font-data); white-space: pre-wrap; word-break: break-word; }
+body.fill .term { flex: 1; min-height: 260px; display: flex; flex-direction: column; }
+body.fill .term .terminal { flex: 1; height: auto; min-height: 0; }
+.nowrap { white-space: pre !important; word-break: normal !important; overflow-x: auto; }
+.nowrap > * { width: max-content; min-width: 100%; }
 .term .time { color: var(--term-dim); }
 .term .sent { color: #8ab4ff; }
 .term form { display: flex; gap: 8px; padding: 10px; border-top: 1px solid #222a36; }
 .term input[type=text] { flex: 1; min-width: 0; width: auto; border-color: #222a36; background: #141a23; color: var(--term-ink); font-family: var(--font-data); }
 .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px; color: var(--muted); }
 .toolbar label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+/* small switch with its text, for page options like "Wrap lines" (no plain check boxes) */
+.toggle { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; color: var(--muted); }
+.toggle .switch { width: 34px; height: 20px; }
+.toggle .switch span::after { top: 2px; left: 2px; width: 16px; height: 16px; }
+.toggle .switch input:checked + span::after { transform: translateX(14px); }
 .toolbar .grow { flex: 1; }
 pre.log { margin: 0; padding: 14px 16px; max-height: 50vh; overflow-y: auto; background: var(--term-bg); color: var(--term-ink); font: 12.5px/1.5 var(--font-data); white-space: pre-wrap; word-break: break-word; }
 dl.kv { display: grid; grid-template-columns: minmax(8rem, 38%) minmax(0, 1fr); margin: 0; }
 dl.kv > * { margin: 0; padding: 11px 16px; border-top: 1px solid var(--line); min-width: 0; overflow-wrap: anywhere; }
 dl.kv > :nth-child(-n+2) { border-top: 0; }
 dl.kv dt { color: var(--muted); }
+
+/* ---------- memory ---------- */
+.stack { display: flex; flex-direction: column; gap: 22px; }
+.toolbar input[type=search] { flex: 1 1 14rem; width: auto; height: 38px; padding: 0 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+.ns { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.ns .eyebrow { margin: 0 4px; }
+.ns small { color: var(--muted); font-size: 12px; text-align: right; }
+.entry { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px 16px; padding: 12px 16px; min-height: 60px; }
+.entry + .entry { border-top: 1px solid var(--line); }
+.entry .key { font: 600 14px var(--font-data); overflow-wrap: anywhere; }
+.entry.orphan .key { color: var(--muted); }
+.entry.changed { background: color-mix(in srgb, var(--accent) 6%, var(--surface)); }
+.entry .meta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.entry .edit { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 8px; }
+.entry .edit input[type=text], .entry .edit input[type=password] { width: 12rem; }
+.entry .edit input.num { width: 7.5rem; text-align: right; }
+.entry .confirm { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; border-radius: 10px; background: color-mix(in srgb, var(--warn) 10%, var(--surface)); font-size: 13.5px; }
+.blob { font-size: 12.5px; color: var(--muted); max-width: 18rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tag.secret { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 40%, var(--line)); }
+button.iconbtn { width: 40px; padding: 0; color: var(--muted); }
+button.iconbtn:hover:not(:disabled) { color: var(--accent); }
+button.iconbtn.delete:hover { color: var(--bad); }
+.grid-add { display: grid; grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); gap: 12px; padding: 14px 16px; }
+.grid-add label { display: grid; gap: 4px; align-content: start; font-size: 12.5px; color: var(--muted); }
+.grid-add input[type=text], .grid-add select { width: 100%; color: var(--ink); font-size: 15px; }
+@media (max-width: 560px) { .entry { grid-template-columns: minmax(0, 1fr); } .entry .edit { justify-content: flex-start; } }
 
 #pu-toast {
   position: fixed; left: 50%; bottom: 20px; transform: translate(-50%, 20px); max-width: 90vw; padding: 10px 16px;
@@ -272,10 +314,13 @@ const pu = (() => {
     terminal: '<rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M7 10l3 2.5L7 15M12.5 15H17"/>',
     chip: '<rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9.5 3v3M14.5 3v3M9.5 18v3M14.5 18v3M3 9.5h3M3 14.5h3M18 9.5h3M18 14.5h3"/>',
     menu: '<path d="M4 7h16M4 12h16M4 17h16"/>',
+    memory: '<ellipse cx="12" cy="6" rx="7" ry="2.8"/><path d="M5 6v12c0 1.5 3.1 2.8 7 2.8s7-1.3 7-2.8V6M5 12c0 1.5 3.1 2.8 7 2.8s7-1.3 7-2.8"/>',
+    reset: '<path d="M4 12a8 8 0 1 0 2.4-5.7M4 4v4.5h4.5"/>',
+    trash: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-12M9 7V4h6v3"/>',
     lock: '<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
   };
 
-  // Line icon by name: home, page, wifi, upload, terminal, chip, menu, lock.
+  // Line icon by name: home, page, wifi, upload, terminal, chip, menu, lock, memory, reset, trash.
   function icon(name) {
     const holder = document.createElement("span");
     holder.innerHTML = '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true">' + icons[name] + "</svg>";
@@ -296,22 +341,68 @@ const pu = (() => {
     toastTimer = setTimeout(() => { box.className = ""; }, isError ? 6000 : 2500);
   }
 
+  // Answers once `origin` (e.g. "http://192.168.1.20") responds. Other addresses than the
+  // page's own cannot be read (no CORS), but an opaque answer is enough to know it is up.
+  function probe(origin) {
+    if (origin === location.origin) {
+      return get("/api/pu/nav");
+    }
+    const abort = new AbortController();
+    const timer = setTimeout(() => abort.abort(), 3000);
+    return fetch(origin + "/pu/app.css", { mode: "no-cors", cache: "no-store", signal: abort.signal })
+      .finally(() => clearTimeout(timer));
+  }
+
   // After the device was told to restart: wait until it answers again, then reload the page.
-  function waitForRestart() {
+  // With `origins` the device may come back at another address: the first one that answers is
+  // opened at `path` (default: this page).
+  function waitForRestart(origins, path) {
     toast("Device is restarting...");
+    const candidates = [...new Set(origins && origins.length > 0 ? origins : [location.origin])];
+    const open = (origin) => {
+      if (origin === location.origin && !path) {
+        location.reload();
+      } else {
+        location.href = origin + (path || location.pathname + location.search);
+      }
+    };
     const poll = () => {
-      get("/api/pu/nav").then(() => location.reload()).catch(() => setTimeout(poll, 1000));
+      Promise.any(candidates.map((origin) => probe(origin).then(() => origin)))
+        .then(open).catch(() => setTimeout(poll, 1500));
     };
     setTimeout(poll, 4000);
+  }
+
+  // Per-browser preference; storage may be unavailable (private mode), then the default counts.
+  function remember(key, fallback, value) {
+    try {
+      if (value !== undefined) {
+        localStorage.setItem("pu." + key, JSON.stringify(value));
+        return value;
+      }
+      const stored = localStorage.getItem("pu." + key);
+      return stored === null ? fallback : JSON.parse(stored);
+    } catch (error) {
+      return value !== undefined ? value : fallback;
+    }
+  }
+
+  // Connects a checkbox to a remembered "wrap long lines" setting for `target` (default off).
+  function wrapToggle(checkbox, target) {
+    const apply = () => target.classList.toggle("nowrap", !checkbox.checked);
+    checkbox.checked = remember("wrapLines", false);
+    apply();
+    checkbox.addEventListener("change", () => { remember("wrapLines", false, checkbox.checked); apply(); });
   }
 
   const builtIn = [
     { path: "/settings", title: "Settings" },
     { path: "/update", title: "Update" },
     { path: "/console", title: "Console" },
+    { path: "/memory", title: "Memory" },
     { path: "/info", title: "Device info" },
   ];
-  const builtInIcons = { "/settings": "wifi", "/update": "upload", "/console": "terminal", "/info": "chip" };
+  const builtInIcons = { "/settings": "wifi", "/update": "upload", "/console": "terminal", "/memory": "memory", "/info": "chip" };
 
   let rail = null;
   let online = null;
@@ -354,7 +445,7 @@ const pu = (() => {
     }, 10000);
   });
 
-  return { get, post, el, icon, toast, waitForRestart };
+  return { get, post, el, icon, toast, waitForRestart, remember, wrapToggle };
 })();
 )PUWEB";
 
@@ -369,7 +460,7 @@ static const char kWebConsoleHtml[] PROGMEM = R"PUWEB(<!DOCTYPE html>
   <link rel="stylesheet" href="/pu/app.css">
   <script src="/pu/app.js"></script>
 </head>
-<body>
+<body class="wide fill">
 <h1>Console</h1>
 <p class="lede">Serial output of the device. Type to send a line.</p>
 <div class="content">
@@ -382,8 +473,9 @@ static const char kWebConsoleHtml[] PROGMEM = R"PUWEB(<!DOCTYPE html>
     </form>
   </div>
   <div class="toolbar">
-    <label><input type="checkbox" id="timestamps" checked> Timestamps</label>
-    <label><input type="checkbox" id="follow" checked> Follow output</label>
+    <label class="toggle"><span class="switch"><input type="checkbox" id="timestamps" checked><span></span></span> Timestamps</label>
+    <label class="toggle"><span class="switch"><input type="checkbox" id="follow" checked><span></span></span> Follow output</label>
+    <label class="toggle"><span class="switch"><input type="checkbox" id="wrap"><span></span></span> Wrap lines</label>
     <span class="muted" id="state">Connecting...</span>
     <span class="grow"></span>
     <button id="download">Download</button>
@@ -398,6 +490,7 @@ static const char kWebConsoleHtml[] PROGMEM = R"PUWEB(<!DOCTYPE html>
   const history = [];
   let historyIndex = 0;
   let socket = null;
+  pu.wrapToggle(byId("wrap"), output);
 
   function addLine(text, className) {
     const time = new Date().toTimeString().substring(0, 8);
@@ -498,7 +591,8 @@ static const char kWebInfoHtml[] PROGMEM = R"PUWEB(<!DOCTYPE html>
   </div>
   <div class="panel"><dl class="kv" id="info"></dl></div>
   <div class="group">
-    <p class="eyebrow">Log</p>
+    <div class="toolbar"><p class="eyebrow">Log</p><span class="grow"></span>
+      <label class="toggle"><span class="switch"><input type="checkbox" id="wrap"><span></span></span> Wrap lines</label></div>
     <div class="panel"><pre class="log" id="log"></pre></div>
   </div>
   <div class="control" id="restartBox"></div>
@@ -506,6 +600,7 @@ static const char kWebInfoHtml[] PROGMEM = R"PUWEB(<!DOCTYPE html>
 
 <script>
   const byId = (id) => document.getElementById(id);
+  pu.wrapToggle(byId("wrap"), byId("log"));
   const kb = (bytes) => Math.round(bytes / 1024) + " KB";
 
   function duration(seconds) {
@@ -567,6 +662,256 @@ static const char kWebInfoHtml[] PROGMEM = R"PUWEB(<!DOCTYPE html>
     }, "Restart device"));
   }
   restartIdle();
+</script>
+</body>
+</html>
+)PUWEB";
+
+// web/memory.html
+static const char kWebMemoryHtml[] PROGMEM = R"PUWEB(<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Memory</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/pu/app.css">
+  <script src="/pu/app.js"></script>
+</head>
+<body>
+<h1>Memory</h1>
+<p class="lede">Values stored in the device's flash. They survive restarts and firmware updates.</p>
+<div class="content">
+  <div class="tiles">
+    <div class="tile"><span class="label">Entries in this firmware's areas</span><strong id="count">-</strong></div>
+    <div class="tile"><span class="label">Flash for stored values</span><strong><span id="usage">-</span><i>% used</i></strong>
+      <div class="meter" style="margin-top: 10px"><i id="usageBar"></i></div></div>
+  </div>
+  <div class="toolbar">
+    <input type="search" class="grow" id="filter" placeholder="Filter by name or value" aria-label="Filter entries">
+    <label class="toggle"><span class="switch"><input type="checkbox" id="showLibrary"><span></span></span> Show library entries</label>
+  </div>
+  <div class="stack" id="areas"></div>
+
+  <div class="group">
+    <p class="eyebrow">Add an entry</p>
+    <div class="panel">
+      <div class="grid-add">
+        <label>Area<select id="addArea"></select></label>
+        <label id="newAreaBox" hidden>New area name<input type="text" class="data" id="newArea" maxlength="15"
+          placeholder="up to 15 characters" autocapitalize="off" spellcheck="false"></label>
+        <label>Name<input type="text" class="data" id="addKey" maxlength="15" placeholder="up to 15 characters"
+          autocapitalize="off" spellcheck="false"></label>
+        <label>Type<select id="addType">
+          <option value="int">Whole number (int)</option>
+          <option value="float">Decimal number (float)</option>
+          <option value="bool">On / off (bool)</option>
+          <option value="text" selected>Text</option>
+        </select></label>
+        <label id="addValueBox">Value<input type="text" class="data" id="addValue" autocapitalize="off" spellcheck="false"></label>
+        <label id="addFlagBox" hidden>Value<span class="switch"><input type="checkbox" id="addFlag" aria-label="Value"><span></span></span></label>
+      </div>
+      <div class="phase">A firmware reads the entry only if it defines the same name with the same type
+        in the same area. Names: letters, digits, - _ and . only.</div>
+      <div class="actions"><button class="primary" id="add">Add</button></div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const byId = (id) => document.getElementById(id);
+  let data = null;
+  // Changing these can make the device unreachable or move it to another address.
+  const risky = {
+    ssid: "The device joins this WiFi network after the next restart. With a wrong name it cannot be reached and opens its access point.",
+    password: "The device uses this WiFi password after the next restart. If it is wrong, the device cannot be reached and opens its access point.",
+    deviceName: "The device's name and its .local address change after the next restart.",
+    ipMode: "Switches between automatic and static IP address after the next restart, without the confirmation of the settings page.",
+    localIP: "The device's static IP address changes after the next restart, without the confirmation of the settings page.",
+    gateway: "A wrong gateway can make the device unreachable after the next restart.",
+    subnet: "A wrong subnet mask can make the device unreachable after the next restart.",
+  };
+  const typeLabel = { int: "int", float: "float", double: "double", bool: "bool", text: "text", blob: "data", other: "other" };
+
+  function load() {
+    return pu.get("/api/pu/memory").then((result) => { result.drawn = data !== null; data = result; draw(); })
+      .catch((error) => pu.toast(error.message, true));
+  }
+
+  const areaTitle = (area) => (area.library ? "ProjectUtils library" : area.name);
+  const shown = (value) => (value === "" ? "empty" : String(value));
+
+  function iconButton(name, title) {
+    const button = pu.el("button", { type: "button", className: "iconbtn", title, ariaLabel: title }, pu.icon(name));
+    return button;
+  }
+
+  function send(path, params, done) {
+    return pu.post(path, params).then((result) => { pu.toast(params.key + ": " + result.message); return load(); })
+      .then(done).catch((error) => pu.toast(params.key + ": " + error.message, true));
+  }
+
+  // Runs `action` straight away, or after an inline confirmation for entries that matter for
+  // reaching the device.
+  function confirmFirst(area, entry, row, verb, action) {
+    const warning = area.library ? risky[entry.key] : null;
+    if (!warning) {
+      action();
+      return;
+    }
+    const box = pu.el("div", { className: "confirm" }, pu.el("span", null, warning),
+      pu.el("span", { className: "control" },
+        pu.el("button", { type: "button", className: "red solid", onclick: action }, verb),
+        pu.el("button", { type: "button", onclick: () => box.remove() }, "Cancel")));
+    row.querySelector(".confirm")?.remove();
+    row.append(box);
+  }
+
+  function editor(area, entry, row) {
+    const params = (value) => ({ area: area.name, key: entry.key, value });
+    if (!entry.editable) {
+      const text = entry.type === "blob" ? entry.size + " bytes" + (entry.value ? " · " + entry.value : "")
+        : entry.value === null || entry.value === undefined ? "" : String(entry.value);
+      return pu.el("span", { className: "blob data", title: text }, text);
+    }
+    if (entry.type === "bool") {
+      const box = pu.el("input", { type: "checkbox", checked: entry.value, ariaLabel: entry.key });
+      box.addEventListener("change", () => {
+        confirmFirst(area, entry, row, "Change", () => send("/api/pu/memory/set", params(String(box.checked))));
+      });
+      return pu.el("label", { className: "switch" }, box, pu.el("span"));
+    }
+    const numeric = entry.type !== "text";
+    const input = pu.el("input", {
+      type: entry.secret ? "password" : "text",
+      className: "data" + (numeric ? " num" : ""),
+      value: entry.secret ? "" : String(entry.value),
+      placeholder: entry.secret ? (entry.set ? "set, hidden" : "not set") : "",
+      inputMode: entry.type === "int" ? "numeric" : numeric ? "decimal" : "text",
+      autocomplete: "off",
+      ariaLabel: entry.key,
+    });
+    const save = pu.el("button", { type: "button", className: "primary", hidden: true }, "Save");
+    input.addEventListener("input", () => {
+      save.hidden = false;
+      row.classList.add("changed");
+    });
+    const submit = () => confirmFirst(area, entry, row, "Save", () => send("/api/pu/memory/set", params(input.value)));
+    save.addEventListener("click", submit);
+    input.addEventListener("keydown", (event) => { if (event.key === "Enter") { submit(); } });
+    return pu.el("span", { className: "control" }, input, save);
+  }
+
+  function entryRow(area, entry) {
+    const row = pu.el("div", { className: "entry" + (entry.defined ? "" : " orphan") });
+    const meta = pu.el("div", { className: "meta" }, pu.el("span", { className: "tag data" }, typeLabel[entry.type] || entry.type));
+    if (entry.secret) {
+      meta.append(pu.el("span", { className: "tag secret" }, "secret"));
+    }
+    if (!entry.defined) {
+      meta.append(pu.el("span", { className: "tag warn" }, "not used by this firmware"));
+    } else if (!entry.stored) {
+      meta.append(pu.el("span", { className: "tag" }, "default"));
+    } else if (!entry.secret && "default" in entry && entry.type !== "blob" && entry.value !== entry.default) {
+      meta.append(pu.el("span", { className: "tag" }, "default " + shown(entry.default)));
+    }
+
+    let button;
+    if (entry.defined) {
+      const atDefault = !entry.stored || (entry.secret ? !entry.set : entry.value === entry.default);
+      button = iconButton("reset", atDefault ? "Already at its default" : "Reset to default");
+      button.disabled = atDefault;
+      button.addEventListener("click", () => confirmFirst(area, entry, row, "Reset",
+        () => send("/api/pu/memory/reset", { area: area.name, key: entry.key })));
+    } else {
+      button = iconButton("trash", "Delete");
+      button.classList.add("delete");
+      button.addEventListener("click", () => send("/api/pu/memory/reset", { area: area.name, key: entry.key }));
+    }
+    row.append(pu.el("div", null, pu.el("div", { className: "key" }, entry.key), meta),
+      pu.el("div", { className: "edit" }, editor(area, entry, row), button));
+    return row;
+  }
+
+  function matches(entry, filter) {
+    if (!filter) {
+      return true;
+    }
+    const value = entry.secret ? "" : String(entry.value ?? "");
+    return entry.key.toLowerCase().includes(filter) || value.toLowerCase().includes(filter);
+  }
+
+  function draw() {
+    const filter = byId("filter").value.trim().toLowerCase();
+    const showLibrary = byId("showLibrary").checked;
+    let count = 0;
+    const groups = data.areas.filter((area) => showLibrary || !area.library).map((area) => {
+      const panel = pu.el("div", { className: "panel" });
+      area.entries.filter((entry) => matches(entry, filter)).forEach((entry) => panel.append(entryRow(area, entry)));
+      if (panel.childElementCount === 0) {
+        panel.append(pu.el("div", { className: "row muted" }, area.entries.length ? "No matching entries." : "Nothing stored yet."));
+      }
+      const head = pu.el("div", { className: "ns" }, pu.el("p", { className: "eyebrow" }, areaTitle(area)),
+        pu.el("small", { className: "data" }, area.library ? area.name + " · changes apply after a restart" : ""));
+      return pu.el("div", { className: "group" }, head, panel);
+    });
+    data.areas.forEach((area) => { count += area.entries.filter((entry) => entry.stored).length; });
+    byId("areas").replaceChildren(...groups);
+    byId("count").textContent = count;
+    if (data.total) {
+      const percent = Math.round(100 * data.used / data.total);
+      byId("usage").textContent = percent;
+      byId("usageBar").style.width = percent + "%";
+    }
+    // areas new entries may go to: all but the library's own, or a new one
+    const chosen = byId("addArea").value;
+    const areas = data.areas.filter((area) => !area.library);
+    byId("addArea").replaceChildren(...areas.map((area) => pu.el("option", { value: area.name }, area.name)),
+      pu.el("option", { value: "" }, "New area..."));
+    // the first time "" means nothing chosen yet, later it means "New area..."
+    const known = (data.drawn || chosen !== "") && [...byId("addArea").options].some((option) => option.value === chosen);
+    data.drawn = true;
+    byId("addArea").value = known ? chosen : areas.length > 0 ? areas[0].name : "";
+    updateAddForm();
+  }
+
+  function updateAddForm() {
+    byId("newAreaBox").hidden = byId("addArea").value !== "";
+    const isBool = byId("addType").value === "bool";
+    byId("addValueBox").hidden = isBool;
+    byId("addFlagBox").hidden = !isBool;
+  }
+
+  byId("filter").addEventListener("input", () => data && draw());
+  byId("showLibrary").addEventListener("change", (event) => {
+    pu.remember("memoryLibrary", false, event.target.checked);
+    if (data) { draw(); }
+  });
+  byId("showLibrary").checked = pu.remember("memoryLibrary", false);
+  byId("addArea").addEventListener("change", updateAddForm);
+  byId("addType").addEventListener("change", updateAddForm);
+
+  byId("add").addEventListener("click", () => {
+    const area = byId("addArea").value || byId("newArea").value.trim();
+    const type = byId("addType").value;
+    const params = {
+      area,
+      key: byId("addKey").value.trim(),
+      type,
+      value: type === "bool" ? String(byId("addFlag").checked) : byId("addValue").value,
+    };
+    send("/api/pu/memory/add", params, () => {
+      byId("addKey").value = "";
+      byId("addValue").value = "";
+      byId("newArea").value = "";
+      if (!byId("addArea").value) {
+        byId("addArea").value = area;
+        updateAddForm();
+      }
+    });
+  });
+
+  load();
 </script>
 </body>
 </html>
@@ -823,6 +1168,21 @@ static const char kWebSettingsHtml[] PROGMEM = R"PUWEB(<!DOCTYPE html>
 <h1>Settings</h1>
 <p class="lede">Name and network of this device.</p>
 <form class="content" id="settingsForm">
+  <div class="panel notice" id="trial" hidden>
+    <div class="row">
+      <span class="label"><b>New address active</b>
+        <small>Keep it, or the device goes back to the previous address settings in <span id="trialLeft" class="data"></span>.</small></span>
+      <span class="control">
+        <button type="button" class="primary" id="keep">Keep</button>
+        <button type="button" id="revert">Go back</button>
+      </span>
+    </div>
+  </div>
+  <div class="panel notice warn" id="reverted" hidden>
+    <div class="row"><span class="label"><b>Address settings reverted</b>
+      <small>The new address was not confirmed in time, so the previous settings are back.</small></span></div>
+  </div>
+
   <div class="group">
     <p class="eyebrow">General</p>
     <div class="panel">
@@ -849,42 +1209,226 @@ static const char kWebSettingsHtml[] PROGMEM = R"PUWEB(<!DOCTYPE html>
         <span class="label">Open network<small>The network needs no password</small></span>
         <label class="switch"><input type="checkbox" id="clearPass" aria-label="Open network"><span></span></label>
       </div>
-      <details>
-        <summary>Fixed IP address</summary>
+      <div class="actions"><button type="button" id="scan">Search for networks</button></div>
+    </div>
+  </div>
+
+  <div class="group">
+    <p class="eyebrow">IP address</p>
+    <div class="panel">
+      <div class="row">
+        <span class="label">Static IP address<small id="ipSummary">Assigned by the router (DHCP)</small></span>
+        <label class="switch"><input type="checkbox" id="staticIP" aria-label="Static IP address"><span></span></label>
+      </div>
+      <div class="rows" id="ipFields" hidden>
         <div class="row">
           <label class="label" for="ip">IP address</label>
-          <div class="control"><input type="text" class="data" id="ip" name="ip" placeholder="automatic (DHCP)"></div>
+          <div class="control"><input type="text" class="data" id="ip" name="ip" inputmode="decimal"></div>
         </div>
         <div class="row">
-          <label class="label" for="gateway">Gateway</label>
-          <div class="control"><input type="text" class="data" id="gateway" name="gateway"></div>
+          <label class="label" for="subnet">Subnet mask</label>
+          <div class="control"><input type="text" class="data" id="subnet" name="subnet" inputmode="decimal"></div>
         </div>
-      </details>
+        <div class="row">
+          <label class="label" for="gateway">Gateway<small>Usually the router</small></label>
+          <div class="control"><input type="text" class="data" id="gateway" name="gateway" inputmode="decimal"></div>
+        </div>
+        <div class="row">
+          <label class="label" for="dns1">DNS server<small>Empty: the gateway</small></label>
+          <div class="control"><input type="text" class="data" id="dns1" name="dns1" inputmode="decimal"></div>
+        </div>
+        <div class="row">
+          <label class="label" for="dns2">Second DNS server</label>
+          <div class="control"><input type="text" class="data" id="dns2" name="dns2" inputmode="decimal"></div>
+        </div>
+        <div class="phase" id="ipNote">After saving, the device restarts at the new address and this page follows it.
+          Confirm there within two minutes, otherwise the device goes back to the previous settings.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="group" id="apGroup">
+    <p class="eyebrow">Access point</p>
+    <div class="panel">
+      <div class="phase" id="apIntro" style="padding-top: 14px">The device's own WiFi network for setting it up.
+        The name is the device name, the settings are at 192.168.4.1.</div>
+      <div class="row">
+        <label class="label" for="apMode">Open the access point</label>
+        <div class="control"><select class="wide" id="apMode"></select></div>
+      </div>
+      <div class="row" id="apGraceRow">
+        <label class="label" for="apGrace">Open after WiFi is lost for<small id="apGraceHint"></small></label>
+        <div class="control"><input type="number" id="apGrace" min="1" step="1"><span class="unit">min</span></div>
+      </div>
+      <div class="row">
+        <label class="label" for="apTimeout">Close when unused for<small id="apTimeoutHint"></small></label>
+        <div class="control"><input type="number" id="apTimeout" min="0" step="1"><span class="unit">min</span></div>
+      </div>
+      <div class="row">
+        <label class="label" for="apPassMode">Password</label>
+        <div class="control"><select class="wide" id="apPassMode"></select></div>
+      </div>
+      <div class="row" id="apPassRow" hidden>
+        <label class="label" for="apPass">Access point password<small>8 to 63 characters</small></label>
+        <div class="control"><input type="password" id="apPass" maxlength="63" autocomplete="new-password"></div>
+      </div>
+      <div class="actions" id="apActions"><button type="button" id="apReset">Use firmware defaults</button></div>
     </div>
   </div>
 
   <div class="control">
     <button type="submit" class="primary">Save and restart</button>
-    <button type="button" id="scan">Search for networks</button>
   </div>
   <p class="muted" id="formMessage"></p>
 </form>
 
 <script>
   const byId = (id) => document.getElementById(id);
+  const params = new URLSearchParams(location.search);
+  const origin = (host) => location.protocol + "//" + host; // the device's other addresses
+  let status = null;
   let connectedTo = "";
 
-  pu.get("/api/pu/status").then((status) => {
+  const modeText = { never: "Never (only without WiFi)", failure: "On WiFi failure", always: "Always" };
+  const minutes = (seconds) => {
+    const value = seconds / 60;
+    return Number.isInteger(value) ? String(value) : value.toFixed(1);
+  };
+  const duration = (seconds) => (seconds === 0 ? "never" : minutes(seconds) + " min");
+
+  pu.get("/api/pu/status").then((result) => {
+    status = result;
     byId("deviceName").value = status.deviceName;
     byId("ssid").value = status.wifi.ssid;
     byId("pass").placeholder = status.wifi.passwordSet ? "unchanged" : "";
-    byId("ip").value = status.wifi.localIP;
-    byId("gateway").value = status.wifi.gateway;
     connectedTo = status.wifi.connected ? status.wifi.ssid : "";
+    showAddress(status.address);
+    showAccessPoint(status.ap);
   }).catch((error) => pu.toast(error.message, true));
 
   byId("clearPass").addEventListener("change", (event) => {
     byId("pass").disabled = event.target.checked;
+  });
+
+  // ---- IP address ----
+  function showAddress(address) {
+    const saved = address.saved;
+    const current = address.current;
+    const connected = status.wifi.connected;
+    byId("staticIP").checked = address.static;
+    // static values that were never set start from what the router handed out
+    const fill = (id, value, fallback) => { byId(id).value = value || (connected ? fallback : ""); };
+    fill("ip", address.static ? saved.ip : "", current.ip);
+    fill("subnet", address.static ? saved.subnet : "", current.subnet);
+    fill("gateway", address.static ? saved.gateway : "", current.gateway);
+    fill("dns1", address.static ? saved.dns1 : "", current.dns1);
+    fill("dns2", address.static ? saved.dns2 : "", current.dns2 === "0.0.0.0" ? "" : current.dns2);
+    if (status.wifi.viaAp) {
+      byId("ipNote").textContent = "You are connected through the device's access point, so the new address " +
+        "cannot be tried out from here. It is used right away; check that the device is reachable.";
+    }
+    updateIpFields();
+    byId("reverted").hidden = !address.reverted;
+    if (address.trialSeconds > 0) {
+      startTrialCountdown(address.trialSeconds);
+    }
+  }
+
+  function updateIpFields() {
+    const on = byId("staticIP").checked;
+    byId("ipFields").hidden = !on;
+    const current = status ? status.address.current.ip : "";
+    byId("ipSummary").textContent = on ? "Set by hand below"
+      : "Assigned by the router (DHCP)" + (status && status.wifi.connected ? ", now " + current : "");
+  }
+  byId("staticIP").addEventListener("change", updateIpFields);
+
+  function startTrialCountdown(seconds) {
+    const end = Date.now() + seconds * 1000;
+    byId("trial").hidden = false;
+    const tick = () => {
+      const left = Math.max(0, Math.round((end - Date.now()) / 1000));
+      byId("trialLeft").textContent = left + " s";
+      if (left > 0 && !byId("trial").hidden) {
+        setTimeout(tick, 1000);
+      }
+    };
+    tick();
+  }
+
+  byId("keep").addEventListener("click", () => {
+    pu.post("/api/pu/network/confirm").then((result) => {
+      byId("trial").hidden = true;
+      pu.toast(result.message);
+    }).catch((error) => pu.toast(error.message, true));
+  });
+
+  byId("revert").addEventListener("click", () => {
+    pu.post("/api/pu/network/revert").then((result) => {
+      byId("trial").hidden = true;
+      byId("formMessage").textContent = result.message;
+      const back = [params.get("from"), origin(status.hostname + ".local")].filter(Boolean);
+      pu.waitForRestart(back, "/settings");
+    }).catch((error) => pu.toast(error.message, true));
+  });
+
+  // ---- access point ----
+  function options(select, entries, value) {
+    select.replaceChildren(...entries.map(([key, text]) => pu.el("option", { value: key }, text)));
+    select.value = value;
+  }
+
+  function showAccessPoint(ap) {
+    const defaults = ap.defaults;
+    const own = ap.own;
+    if (ap.locked) {
+      const active = ap.active;
+      byId("apGroup").querySelector(".panel").replaceChildren(
+        pu.el("div", { className: "phase", style: "padding-top: 14px" }, "Fixed in the firmware of this device."),
+        pu.el("dl", { className: "kv" },
+          pu.el("dt", null, "Open"), pu.el("dd", null, modeText[active.mode]),
+          pu.el("dt", null, "Close when unused for"), pu.el("dd", null, duration(active.timeout)),
+          ...(active.mode === "failure"
+            ? [pu.el("dt", null, "Open after WiFi is lost for"), pu.el("dd", null, duration(active.grace))] : []),
+          pu.el("dt", null, "Password"), pu.el("dd", null, active.passwordSet ? "set" : "none (open network)")));
+      return;
+    }
+    options(byId("apMode"), [
+      ["default", "Default: " + modeText[defaults.mode]],
+      ["never", modeText.never], ["failure", modeText.failure], ["always", modeText.always]], own.mode);
+    byId("apTimeout").placeholder = minutes(defaults.timeout);
+    byId("apTimeout").value = own.timeout >= 0 ? minutes(own.timeout) : "";
+    byId("apTimeoutHint").textContent = "Empty: firmware default (" + duration(defaults.timeout) + "). 0: never";
+    byId("apGrace").placeholder = minutes(defaults.grace);
+    byId("apGrace").value = own.grace >= 0 ? minutes(own.grace) : "";
+    byId("apGraceHint").textContent = "Empty: firmware default (" + duration(defaults.grace) + ")";
+    options(byId("apPassMode"), [
+      ["default", "Default: " + (defaults.passwordSet ? "set" : "none")],
+      ["open", "None (open network)"], ["custom", "Own password"]], own.password);
+    byId("apPass").placeholder = own.password === "custom" ? "unchanged" : "";
+    updateApFields();
+  }
+
+  function updateApFields() {
+    if (!status || status.ap.locked) {
+      return;
+    }
+    const chosen = byId("apMode").value;
+    const mode = chosen === "default" ? status.ap.defaults.mode : chosen;
+    byId("apGraceRow").hidden = mode !== "failure";
+    byId("apPassRow").hidden = byId("apPassMode").value !== "custom";
+  }
+  byId("apMode").addEventListener("change", updateApFields);
+  byId("apPassMode").addEventListener("change", updateApFields);
+
+  byId("apReset").addEventListener("click", () => {
+    byId("apMode").value = "default";
+    byId("apTimeout").value = "";
+    byId("apGrace").value = "";
+    byId("apPassMode").value = "default";
+    byId("apPass").value = "";
+    updateApFields();
+    pu.toast("Firmware defaults chosen. Save to apply them.");
   });
 
   // ---- network search ----
@@ -955,13 +1499,38 @@ static const char kWebSettingsHtml[] PROGMEM = R"PUWEB(<!DOCTYPE html>
   // ---- save ----
   byId("settingsForm").addEventListener("submit", (event) => {
     event.preventDefault();
-    const params = new FormData(event.target);
+    const form = new FormData(event.target);
     if (byId("clearPass").checked) {
-      params.set("clearPass", "true");
+      form.set("clearPass", "true");
     }
-    pu.post("/api/pu/settings", params)
-      .then((result) => { byId("formMessage").textContent = result.message; pu.waitForRestart(); })
-      .catch((error) => { byId("formMessage").textContent = "Saving failed: " + error.message; });
+    form.set("staticIP", byId("staticIP").checked ? "true" : "false");
+    if (status && !status.ap.locked) {
+      const seconds = (id) => (byId(id).value === "" ? "" : String(Math.round(Number(byId(id).value) * 60)));
+      form.set("apMode", byId("apMode").value);
+      form.set("apTimeout", seconds("apTimeout"));
+      form.set("apGrace", seconds("apGrace"));
+      form.set("apPassMode", byId("apPassMode").value);
+      form.set("apPass", byId("apPass").value);
+    }
+    const wasStatic = status && status.address.static;
+    pu.post("/api/pu/settings", form).then((result) => {
+      byId("formMessage").textContent = result.message;
+      const home = origin(status.hostname + ".local");
+      if (result.trial) {
+        // the page moves to the new address; if that never answers, the device comes back here
+        const target = origin(result.address);
+        byId("formMessage").textContent = "Saved. The device restarts at " + result.address +
+          " and this page follows it. If it cannot be reached there, it goes back to the previous " +
+          "settings after " + Math.round(result.trialSeconds / 60) + " minutes and this page reloads here.";
+        pu.waitForRestart([target, location.origin], "/settings?from=" + encodeURIComponent(location.origin));
+      } else if (result.address) {
+        pu.waitForRestart([origin(result.address), location.origin, home], "/settings");
+      } else if (wasStatic) {
+        pu.waitForRestart([location.origin, home], "/settings"); // new address comes from the router
+      } else {
+        pu.waitForRestart();
+      }
+    }).catch((error) => { byId("formMessage").textContent = "Saving failed: " + error.message; });
   });
 </script>
 </body>

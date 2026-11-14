@@ -21,7 +21,8 @@
   </div>
   <div class="panel"><dl class="kv" id="info"></dl></div>
   <div class="group">
-    <p class="eyebrow">Log</p>
+    <div class="toolbar"><p class="eyebrow">Log</p><span class="grow"></span>
+      <label class="toggle"><span class="switch"><input type="checkbox" id="wrap"><span></span></span> Wrap lines</label></div>
     <div class="panel"><pre class="log" id="log"></pre></div>
   </div>
   <div class="control" id="restartBox"></div>
@@ -29,6 +30,7 @@
 
 <script>
   const byId = (id) => document.getElementById(id);
+  pu.wrapToggle(byId("wrap"), byId("log"));
   const kb = (bytes) => Math.round(bytes / 1024) + " KB";
 
   function duration(seconds) {

@@ -2,14 +2,10 @@
 
 #include <Arduino.h>
 
+#include "ApPolicy.h"
 #include "Semver.h"
 
 namespace pu {
-
-enum class ApMode : uint8_t {
-    OnFailure, ///< Open the setup access point only when WiFi is unconfigured or unreachable.
-    Always,    ///< Always open the access point in addition to the WiFi connection.
-};
 
 /// Everything the library needs to know about the project. Fill in what differs from the
 /// defaults and pass it to ProjectUtils.begin().
@@ -20,10 +16,16 @@ struct Config {
     Semver firmwareVersion = Semver{0, 0, 0};
 
     // --- WiFi ---
-    ApMode apMode = ApMode::OnFailure;
-    String apPassword;        ///< Empty = open access point. Otherwise >= 8 chars.
-    uint32_t apTimeoutMs = 0; ///< Close an unused access point after this time. 0 = never.
     uint32_t wifiConnectTimeoutMs = 10000; ///< How long begin() waits for the WiFi connection.
+
+    // --- Setup access point ---
+    // Defaults for every device running this firmware. Each device can change them on its
+    // settings page (stored on the device) unless apLocked is set.
+    ApMode apMode = ApMode::OnFailure;
+    String apPassword;           ///< Empty = open access point. Otherwise 8 to 63 characters.
+    uint32_t apTimeoutMs = 0;    ///< Close after this long without anybody connected. 0 = never.
+    uint32_t apGraceMs = 120000; ///< OnFailure: open once WiFi has been lost this long.
+    bool apLocked = false;       ///< true = the settings page only shows the values above.
 
     // --- Security ---
     /// When set, all web pages, the JSON API, the web console and ArduinoOTA require this password.

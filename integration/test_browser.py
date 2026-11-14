@@ -11,7 +11,7 @@ import pytest
 
 playwright = pytest.importorskip("playwright.sync_api", reason="Playwright is not installed")
 
-PAGES = ["/", "/about", "/settings", "/update", "/console", "/info"]
+PAGES = ["/", "/about", "/settings", "/update", "/console", "/memory", "/info"]
 
 
 @pytest.fixture(scope="module")
@@ -54,7 +54,7 @@ def tile(page, label: str):
 
 def wait_for_menu(page):
     """The menu starts with the built-in pages and gains the project's once loaded."""
-    page.wait_for_function("document.querySelectorAll('.pu-rail a').length === 6")
+    page.wait_for_function("document.querySelectorAll('.pu-rail a').length === 7")
 
 
 @pytest.mark.parametrize("path", PAGES)
@@ -62,7 +62,7 @@ def test_page_loads_without_script_errors_and_shows_the_menu(page, path):
     page.goto(path)
     wait_for_menu(page)
     titles = [title.strip() for title in page.locator(".pu-rail a").all_inner_texts()]
-    assert titles == ["My ESP32", "About", "Settings", "Update", "Console", "Device info"]
+    assert titles == ["My ESP32", "About", "Settings", "Update", "Console", "Memory", "Device info"]
     assert page.locator(".pu-rail a[aria-current=page]").get_attribute("href") == path
     page.wait_for_timeout(1500)  # let the page fetch its data
     assert page.problems == []
@@ -192,6 +192,69 @@ def test_settings_page_lists_networks_and_fills_in_the_chosen_one(page, device):
     page.fill("#ssid", "")
     entry.click()
     assert page.input_value("#ssid") == own
+
+
+def test_settings_page_shows_address_and_access_point(page, device):
+    status = device.status()
+    page.goto("/settings")
+    page.wait_for_function("document.getElementById('apMode').options.length > 0")
+    assert page.is_checked("#staticIP") == status["address"]["static"]
+    assert page.is_hidden("#ipFields") != status["address"]["static"]
+    if not status["address"]["static"]:
+        page.check("#staticIP")  # switching on prefills what the router handed out
+        assert page.input_value("#ip") == status["address"]["current"]["ip"]
+        assert page.input_value("#subnet") == status["address"]["current"]["subnet"]
+    assert page.input_value("#apMode") == status["ap"]["own"]["mode"]
+    page.select_option("#apPassMode", "custom")
+    assert page.is_visible("#apPass")
+    page.select_option("#apMode", "always")
+    assert page.is_hidden("#apGraceRow")
+    page.select_option("#apMode", "failure")
+    assert page.is_visible("#apGraceRow")
+    page.click("#apReset")
+    assert page.input_value("#apMode") == "default"
+    assert page.problems == []
+
+
+def test_wrap_toggle_is_off_by_default_and_remembered(page):
+    page.goto("/console")
+    output = page.locator("#output")
+    assert page.is_checked("#wrap") is False
+    assert "nowrap" in output.get_attribute("class")
+    page.check("#wrap")
+    assert "nowrap" not in output.get_attribute("class")
+    page.goto("/info")
+    assert page.is_checked("#wrap") is True  # one setting for console and log
+    assert "nowrap" not in page.locator("#log").get_attribute("class")
+    assert page.problems == []
+
+
+def test_memory_page_lists_entries_with_reset_and_delete_buttons(page, device):
+    page.goto("/memory")
+    page.locator(".entry").first.wait_for()
+    assert (
+        page.locator(".eyebrow", has_text="ProjectUtils library").count() == 0
+    )  # hidden by default
+    page.check("#showLibrary")
+    page.locator(".eyebrow", has_text="ProjectUtils library").wait_for()
+    password = page.locator(".entry", has=page.locator(".key", has_text="password")).first
+    assert password.locator("input").input_value() == ""  # secret: never shown
+    assert page.input_value("#addArea") == "app"
+    assert "project_utils" not in page.locator("#addArea option").all_inner_texts()
+    assert page.problems == []
+
+
+def test_console_uses_the_whole_width(browser, device):
+    credentials = {"username": device.auth[0], "password": device.auth[1]} if device.auth else None
+    context = browser.new_context(
+        base_url=device.base, http_credentials=credentials, viewport={"width": 1600, "height": 900}
+    )
+    tab = context.new_page()
+    tab.goto("/console")
+    box = tab.locator(".term").bounding_box()
+    assert box["width"] > 1200  # not held to the 860 px column of the other pages
+    assert box["y"] + box["height"] > 700  # reaches down towards the bottom of the window
+    context.close()
 
 
 def test_info_page_shows_device_data_and_log(page):

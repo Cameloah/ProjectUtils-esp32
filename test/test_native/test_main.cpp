@@ -5,14 +5,18 @@
 #include <cstring>
 #include <string>
 
+#include "pu/ApPolicy.h"
 #include "pu/ByteQueue.h"
 #include "pu/HoldState.h"
 #include "pu/Hostname.h"
+#include "pu/Ipv4.h"
 #include "pu/LineQueue.h"
 #include "pu/Numbers.h"
 #include "pu/RingLog.h"
 #include "pu/Semver.h"
 
+using pu::ApMode;
+using pu::ApPolicy;
 using pu::ByteQueue;
 using pu::HoldState;
 using pu::LineQueue;
@@ -271,6 +275,143 @@ static void testHoldStateExpiresWithoutKeepAlive() {
     TEST_ASSERT_TRUE(hold.expire(0x00000300U, 1000));  // 1024 ms later
 }
 
+// ---------- ApPolicy ----------
+
+using Action = ApPolicy::Action;
+
+static ApPolicy makePolicy(ApMode mode, uint32_t timeoutMs, uint32_t graceMs) {
+    ApPolicy::Options options;
+    options.mode = mode;
+    options.timeoutMs = timeoutMs;
+    options.graceMs = graceMs;
+    return ApPolicy(options);
+}
+
+static void testApPolicyOpensAtStart() {
+    const ApMode modes[] = {ApMode::Never, ApMode::OnFailure, ApMode::Always};
+    for (ApMode mode : modes) {
+        const ApPolicy policy = makePolicy(mode, 0, 0);
+        TEST_ASSERT_TRUE(policy.openAtStart(false, false)); // no WiFi stored: always set-up
+    }
+    TEST_ASSERT_FALSE(makePolicy(ApMode::Never, 0, 0).openAtStart(true, false));
+    TEST_ASSERT_TRUE(makePolicy(ApMode::OnFailure, 0, 0).openAtStart(true, false));
+    TEST_ASSERT_FALSE(makePolicy(ApMode::OnFailure, 0, 0).openAtStart(true, true));
+    TEST_ASSERT_TRUE(makePolicy(ApMode::Always, 0, 0).openAtStart(true, true));
+}
+
+static void testApPolicyOpensAfterGracePeriodOnFailureOnly() {
+    ApPolicy failure = makePolicy(ApMode::OnFailure, 0, 120000);
+    TEST_ASSERT_EQUAL(Action::None, failure.update(1000, true, true, 0));
+    TEST_ASSERT_EQUAL(Action::None, failure.update(2000, true, false, 0)); // lost
+    TEST_ASSERT_EQUAL(Action::None, failure.update(120999, true, false, 0));
+    TEST_ASSERT_EQUAL(Action::Open, failure.update(121000, true, false, 0));
+    failure.opened(121000);
+    TEST_ASSERT_EQUAL(Action::None, failure.update(200000, true, false, 0));
+    TEST_ASSERT_EQUAL(Action::Close, failure.update(210000, true, true, 0)); // WiFi back
+    failure.closed();
+    TEST_ASSERT_EQUAL(Action::None, failure.update(220000, true, true, 0));
+
+    // a short drop does not open it
+    TEST_ASSERT_EQUAL(Action::None, failure.update(230000, true, false, 0));
+    TEST_ASSERT_EQUAL(Action::None, failure.update(240000, true, true, 0));
+    TEST_ASSERT_EQUAL(Action::None, failure.update(300000, true, false, 0));
+
+    ApPolicy never = makePolicy(ApMode::Never, 0, 1000);
+    never.update(0, true, true, 0);
+    TEST_ASSERT_EQUAL(Action::None, never.update(999999, true, false, 0));
+}
+
+static void testApPolicyClientsKeepItOpen() {
+    ApPolicy policy = makePolicy(ApMode::OnFailure, 60000, 0);
+    policy.opened(0);
+    TEST_ASSERT_EQUAL(Action::None, policy.update(1000, true, true, 1)); // WiFi back, but in use
+    TEST_ASSERT_EQUAL(Action::None, policy.update(90000, false, false, 2));
+    // the timeout counts from when the last client left
+    TEST_ASSERT_EQUAL(Action::None, policy.update(149999, false, false, 0));
+    TEST_ASSERT_EQUAL(Action::Close, policy.update(150000, false, false, 0));
+}
+
+static void testApPolicyTimeoutHoldsForTheRestOfTheOutage() {
+    ApPolicy policy = makePolicy(ApMode::OnFailure, 60000, 1000);
+    policy.opened(0); // opened at start-up, WiFi not reachable
+    TEST_ASSERT_EQUAL(Action::Close, policy.update(60000, true, false, 0));
+    policy.closed();
+    TEST_ASSERT_EQUAL(Action::None, policy.update(500000, true, false, 0)); // still the same outage
+    TEST_ASSERT_EQUAL(Action::None, policy.update(510000, true, true, 0));  // back
+    TEST_ASSERT_EQUAL(Action::None, policy.update(510500, true, false, 0)); // lost again
+    TEST_ASSERT_EQUAL(Action::Open, policy.update(511000, true, false, 0));
+}
+
+static void testApPolicyAlwaysClosesOnlyByTimeout() {
+    ApPolicy policy = makePolicy(ApMode::Always, 0, 0);
+    policy.opened(0);
+    TEST_ASSERT_EQUAL(Action::None, policy.update(999999, true, true, 0));
+
+    ApPolicy timed = makePolicy(ApMode::Always, 10000, 0);
+    timed.opened(0);
+    TEST_ASSERT_EQUAL(Action::Close, timed.update(10000, true, true, 0));
+    timed.closed();
+    TEST_ASSERT_EQUAL(Action::None, timed.update(20000, true, false, 0));
+    TEST_ASSERT_EQUAL(Action::None, timed.update(999999, true, false, 0));
+}
+
+static void testApPolicyRollover() {
+    ApPolicy policy = makePolicy(ApMode::OnFailure, 0, 1000);
+    policy.update(0xFFFFFF00U, true, false, 0);
+    policy.update(0xFFFFFF00U, true, true, 0);
+    TEST_ASSERT_EQUAL(Action::None, policy.update(0x00000100U, true, false, 0)); // 512 ms lost
+    TEST_ASSERT_EQUAL(Action::Open, policy.update(0x00000300U, true, false, 0)); // 1024 ms
+}
+
+// ---------- Ipv4 ----------
+
+static void testIpv4ParsesOnlyDottedQuads() {
+    uint32_t ip = 0;
+    TEST_ASSERT_TRUE(pu::ipv4::parse("192.168.1.20", ip));
+    TEST_ASSERT_EQUAL_HEX32(0xC0A80114U, ip);
+    TEST_ASSERT_TRUE(pu::ipv4::parse("0.0.0.0", ip));
+    TEST_ASSERT_TRUE(pu::ipv4::parse("255.255.255.255", ip));
+    const char* bad[] = {"",       "1.2.3",    "1.2.3.4.5", "256.1.1.1",  "1.2.3.4 ", " 1.2.3.4",
+                         "1..2.3", "01.2.3.4", "1.2.3.a",   "1.2.3.1000", "1.2.3.-4", nullptr};
+    for (const char* text : bad) {
+        TEST_ASSERT_FALSE_MESSAGE(pu::ipv4::parse(text, ip), text == nullptr ? "null" : text);
+    }
+}
+
+static void testIpv4ChecksStaticConfiguration() {
+    using pu::ipv4::StaticIpError;
+    const auto check = [](const char* address, const char* mask, const char* gateway) {
+        uint32_t a = 0;
+        uint32_t m = 0;
+        uint32_t g = 0;
+        TEST_ASSERT_TRUE(pu::ipv4::parse(address, a) && pu::ipv4::parse(mask, m) &&
+                         pu::ipv4::parse(gateway, g));
+        return pu::ipv4::checkStatic(a, m, g);
+    };
+    TEST_ASSERT_EQUAL(StaticIpError::None, check("192.168.1.20", "255.255.255.0", "192.168.1.1"));
+    TEST_ASSERT_EQUAL(StaticIpError::None, check("10.0.5.7", "255.255.0.0", "10.0.0.1"));
+    TEST_ASSERT_EQUAL(StaticIpError::None, check("192.168.1.2", "255.255.255.252", "192.168.1.1"));
+    TEST_ASSERT_EQUAL(StaticIpError::InvalidMask,
+                      check("192.168.1.20", "255.0.255.0", "192.168.1.1"));
+    TEST_ASSERT_EQUAL(StaticIpError::InvalidMask, check("192.168.1.20", "0.0.0.0", "192.168.1.1"));
+    TEST_ASSERT_EQUAL(StaticIpError::InvalidMask,
+                      check("192.168.1.20", "255.255.255.254", "192.168.1.21"));
+    TEST_ASSERT_EQUAL(StaticIpError::AddressNotUsable,
+                      check("192.168.1.0", "255.255.255.0", "192.168.1.1"));
+    TEST_ASSERT_EQUAL(StaticIpError::AddressNotUsable,
+                      check("192.168.1.255", "255.255.255.0", "192.168.1.1"));
+    TEST_ASSERT_EQUAL(StaticIpError::AddressNotUsable,
+                      check("127.0.0.5", "255.0.0.0", "127.0.0.1"));
+    TEST_ASSERT_EQUAL(StaticIpError::AddressNotUsable,
+                      check("224.0.0.5", "255.255.255.0", "224.0.0.1"));
+    TEST_ASSERT_EQUAL(StaticIpError::GatewayNotUsable,
+                      check("192.168.1.20", "255.255.255.0", "192.168.1.255"));
+    TEST_ASSERT_EQUAL(StaticIpError::GatewayOutsideSubnet,
+                      check("192.168.1.20", "255.255.255.0", "192.168.0.1"));
+    TEST_ASSERT_EQUAL(StaticIpError::GatewayIsAddress,
+                      check("192.168.1.1", "255.255.255.0", "192.168.1.1"));
+}
+
 int main() {
     UNITY_BEGIN();
     RUN_TEST(testSemverParsesWithAndWithoutPrefix);
@@ -289,5 +430,13 @@ int main() {
     RUN_TEST(testWholeNumberAndRange);
     RUN_TEST(testHoldStateReportsEdgesOnly);
     RUN_TEST(testHoldStateExpiresWithoutKeepAlive);
+    RUN_TEST(testApPolicyOpensAtStart);
+    RUN_TEST(testApPolicyOpensAfterGracePeriodOnFailureOnly);
+    RUN_TEST(testApPolicyClientsKeepItOpen);
+    RUN_TEST(testApPolicyTimeoutHoldsForTheRestOfTheOutage);
+    RUN_TEST(testApPolicyAlwaysClosesOnlyByTimeout);
+    RUN_TEST(testApPolicyRollover);
+    RUN_TEST(testIpv4ParsesOnlyDottedQuads);
+    RUN_TEST(testIpv4ChecksStaticConfiguration);
     return UNITY_END();
 }

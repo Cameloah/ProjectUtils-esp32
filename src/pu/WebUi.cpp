@@ -9,6 +9,7 @@
 #include "Clock.h"
 #include "Console.h"
 #include "GithubUpdater.h"
+#include "Ipv4.h"
 #include "RamLog.h"
 #include "Settings.h"
 #include "WifiManager.h"
@@ -48,9 +49,78 @@ String postValue(AsyncWebServerRequest* request, const char* name) {
     return value;
 }
 
+const uint32_t kMaxApSeconds = 7U * 24U * 3600U; // a week
+const size_t kMinApPassword = 8;                 // limits of WPA2
+const size_t kMaxApPassword = 63;
+
+/// Like postValue, but keeps leading and trailing spaces (text values are stored as typed).
+String rawPostValue(AsyncWebServerRequest* request, const char* name) {
+    const AsyncWebParameter* param = request->getParam(name, true);
+    return param != nullptr ? param->value() : String();
+}
+
 bool isIpOrEmpty(const String& text) {
-    IPAddress ip;
-    return text.isEmpty() || ip.fromString(text);
+    uint32_t ip = 0;
+    return text.isEmpty() || ipv4::parse(text.c_str(), ip);
+}
+
+const char* apModeName(ApMode mode) {
+    switch (mode) {
+    case ApMode::Never:
+        return "never";
+    case ApMode::Always:
+        return "always";
+    default:
+        return "failure";
+    }
+}
+
+bool parseApMode(const String& text, int32_t& out) {
+    const struct {
+        const char* name;
+        int32_t value;
+    } modes[] = {{"default", -1},
+                 {"never", static_cast<int32_t>(ApMode::Never)},
+                 {"failure", static_cast<int32_t>(ApMode::OnFailure)},
+                 {"always", static_cast<int32_t>(ApMode::Always)}};
+    for (const auto& mode : modes) {
+        if (text == mode.name) {
+            out = mode.value;
+            return true;
+        }
+    }
+    return false;
+}
+
+/// "" = firmware default (-1), otherwise whole seconds within [minimum, kMaxApSeconds].
+bool parseApSeconds(const String& text, uint32_t minimum, int32_t& out) {
+    if (text.isEmpty()) {
+        out = -1;
+        return true;
+    }
+    double seconds = 0.0;
+    if (!parseNumber(text.c_str(), seconds) || !isWholeNumber(seconds) || seconds < minimum ||
+        seconds > kMaxApSeconds) {
+        return false;
+    }
+    out = static_cast<int32_t>(seconds);
+    return true;
+}
+
+void addIpFields(JsonObject target, const String& address, const String& gateway,
+                 const String& subnet, const String& dns1, const String& dns2) {
+    target["ip"] = address;
+    target["gateway"] = gateway;
+    target["subnet"] = subnet;
+    target["dns1"] = dns1;
+    target["dns2"] = dns2;
+}
+
+void addApFields(JsonObject target, const ApSettings& ap) {
+    target["mode"] = apModeName(ap.mode);
+    target["timeout"] = ap.timeoutMs / 1000U;
+    target["grace"] = ap.graceMs / 1000U;
+    target["passwordSet"] = !ap.password.isEmpty(); // never the password itself
 }
 
 const char* resetReasonText() {
@@ -95,8 +165,10 @@ void WebUi::begin(const Config& config, Settings& settings, WifiManager& wifi,
     clock_ = &clock;
     sketchSize_ = ESP.getSketchSize(); // reads the firmware image, too slow for a request handler
 
+    memory_.begin(settings);
     registerRoutes();
     registerPageApi();
+    registerMemoryApi();
     if (config_->enableConsole) {
         beginConsole(console);
     }
@@ -205,6 +277,49 @@ void WebUi::registerPageApi() {
         Page* target = findPage(request, false);
         if (target != nullptr) {
             request->send(200, kJson, target->layoutJson());
+        }
+    });
+}
+
+// ---------- memory page ----------
+
+void WebUi::registerMemoryApi() {
+    // The longer paths first: a route also matches everything below it.
+    server_.on("/api/pu/memory/set", HTTP_POST, [this](AsyncWebServerRequest* request) {
+        if (!authorize(request)) {
+            return;
+        }
+        String message;
+        const int code = memory_.set(postValue(request, "area"), postValue(request, "key"),
+                                     rawPostValue(request, "value"), message);
+        sendResult(request, code, message.c_str());
+    });
+    server_.on("/api/pu/memory/reset", HTTP_POST, [this](AsyncWebServerRequest* request) {
+        if (!authorize(request)) {
+            return;
+        }
+        String message;
+        const int code =
+            memory_.reset(postValue(request, "area"), postValue(request, "key"), message);
+        sendResult(request, code, message.c_str());
+    });
+    server_.on("/api/pu/memory/add", HTTP_POST, [this](AsyncWebServerRequest* request) {
+        if (!authorize(request)) {
+            return;
+        }
+        String message;
+        const int code =
+            memory_.add(postValue(request, "area"), postValue(request, "key"),
+                        postValue(request, "type"), rawPostValue(request, "value"), message);
+        sendResult(request, code, message.c_str());
+    });
+    server_.on("/api/pu/memory", HTTP_GET, [this](AsyncWebServerRequest* request) {
+        if (request->url() != "/api/pu/memory") {
+            request->send(404, "text/plain", "Not found"); // the route also matches paths below it
+        } else if (authorize(request)) {
+            JsonDocument doc;
+            memory_.describe(doc);
+            sendJson(request, 200, doc);
         }
     });
 }
@@ -339,6 +454,7 @@ void WebUi::registerRoutes() {
     serveAsset("/settings", kHtml, kWebSettingsHtml, sizeof(kWebSettingsHtml) - 1, true);
     serveAsset("/update", kHtml, kWebUpdateHtml, sizeof(kWebUpdateHtml) - 1, true);
     serveAsset("/info", kHtml, kWebInfoHtml, sizeof(kWebInfoHtml) - 1, true);
+    serveAsset("/memory", kHtml, kWebMemoryHtml, sizeof(kWebMemoryHtml) - 1, true);
 
     server_.on("/api/pu/nav", HTTP_GET, [this](AsyncWebServerRequest* request) {
         if (authorize(request)) {
@@ -366,6 +482,28 @@ void WebUi::registerRoutes() {
         if (authorize(request)) {
             handleSettingsPost(request);
         }
+    });
+    server_.on("/api/pu/network/confirm", HTTP_POST, [this](AsyncWebServerRequest* request) {
+        if (!authorize(request)) {
+            return;
+        }
+        if (wifi_->ipTrialRemainingMs() == 0) {
+            sendResult(request, 409, "no new address settings to confirm");
+            return;
+        }
+        wifi_->confirmIp();
+        sendResult(request, 200, "The new address settings are kept.");
+    });
+    server_.on("/api/pu/network/revert", HTTP_POST, [this](AsyncWebServerRequest* request) {
+        if (!authorize(request)) {
+            return;
+        }
+        if (wifi_->ipTrialRemainingMs() == 0) {
+            sendResult(request, 409, "no new address settings to revert");
+            return;
+        }
+        wifi_->revertIp();
+        sendResult(request, 202, "Going back to the previous address settings, restarting.");
     });
     server_.on("/api/pu/wifi/scan", HTTP_GET, [this](AsyncWebServerRequest* request) {
         if (authorize(request)) {
@@ -445,6 +583,7 @@ void WebUi::handleNav(AsyncWebServerRequest* request) const {
     if (config_->enableConsole) {
         add("/console", "Console");
     }
+    add("/memory", "Memory");
     add("/info", "Device info");
     sendJson(request, 200, doc);
 }
@@ -593,8 +732,33 @@ void WebUi::handleStatus(AsyncWebServerRequest* request) const {
     wifi["ip"] = WiFi.localIP().toString();
     wifi["ssid"] = settings_->getString("ssid");
     wifi["passwordSet"] = !settings_->getString("password").isEmpty(); // never the password itself
-    wifi["localIP"] = settings_->getString("localIP");
-    wifi["gateway"] = settings_->getString("gateway");
+    wifi["viaAp"] = arrivedViaAp(request);
+
+    const IpConfig ip = wifi_->ipConfig();
+    JsonObject address = doc["address"].to<JsonObject>();
+    address["static"] = ip.isStatic;
+    addIpFields(address["saved"].to<JsonObject>(), ip.address, ip.gateway, ip.subnet, ip.dns1,
+                ip.dns2);
+    addIpFields(address["current"].to<JsonObject>(), WiFi.localIP().toString(),
+                WiFi.gatewayIP().toString(), WiFi.subnetMask().toString(), WiFi.dnsIP(0).toString(),
+                WiFi.dnsIP(1).toString());
+    address["trialSeconds"] = (wifi_->ipTrialRemainingMs() + 999U) / 1000U;
+    address["reverted"] = wifi_->ipReverted();
+
+    JsonObject ap = doc["ap"].to<JsonObject>();
+    ap["locked"] = config_->apLocked;
+    ap["open"] = wifi_->portalActive();
+    addApFields(ap["active"].to<JsonObject>(), wifi_->apSettings());
+    addApFields(ap["defaults"].to<JsonObject>(), WifiManager::apDefaults(*config_));
+    // what this device changed: -1 = firmware default
+    JsonObject own = ap["own"].to<JsonObject>();
+    const int32_t ownMode = settings_->getInt("apMode", -1);
+    own["mode"] = ownMode < 0 ? "default" : apModeName(static_cast<ApMode>(ownMode));
+    own["timeout"] = settings_->getInt("apTimeout", -1);
+    own["grace"] = settings_->getInt("apGrace", -1);
+    own["password"] = !settings_->getBool("apPassOwn")           ? "default"
+                      : settings_->getString("apPass").isEmpty() ? "open"
+                                                                 : "custom";
 
     JsonObject updateJson = doc["update"].to<JsonObject>();
     updateJson["configured"] = updater_->configured();
@@ -605,11 +769,108 @@ void WebUi::handleStatus(AsyncWebServerRequest* request) const {
     sendJson(request, 200, doc);
 }
 
-void WebUi::handleSettingsPost(AsyncWebServerRequest* request) {
-    const String localIp = postValue(request, "ip");
+bool WebUi::arrivedViaAp(AsyncWebServerRequest* request) const {
+    return wifi_->portalActive() && request->client() != nullptr &&
+           request->client()->localIP() == WiFi.softAPIP();
+}
+
+bool WebUi::readIpConfig(AsyncWebServerRequest* request, IpConfig& out, String& error) const {
+    out = wifi_->ipConfig();
+    if (!request->hasParam("staticIP", true)) {
+        return true; // address settings not part of this form
+    }
+    out.isStatic = postValue(request, "staticIP") == "true";
+    if (!out.isStatic) {
+        return true; // the static values stay stored for the next time
+    }
+    const String address = postValue(request, "ip");
+    const String subnet = postValue(request, "subnet");
     const String gateway = postValue(request, "gateway");
-    if (!isIpOrEmpty(localIp) || !isIpOrEmpty(gateway)) {
-        sendResult(request, 400, "IP address or gateway is not a valid IPv4 address");
+    const String dns1 = postValue(request, "dns1");
+    const String dns2 = postValue(request, "dns2");
+    uint32_t addressBits = 0;
+    uint32_t subnetBits = 0;
+    uint32_t gatewayBits = 0;
+    if (!ipv4::parse(address.c_str(), addressBits) || !ipv4::parse(subnet.c_str(), subnetBits) ||
+        !ipv4::parse(gateway.c_str(), gatewayBits)) {
+        error = "IP address, subnet mask and gateway must be IPv4 addresses like 192.168.1.20";
+        return false;
+    }
+    const ipv4::StaticIpError problem = ipv4::checkStatic(addressBits, subnetBits, gatewayBits);
+    if (problem != ipv4::StaticIpError::None) {
+        error = ipv4::describe(problem);
+        return false;
+    }
+    if (!isIpOrEmpty(dns1) || !isIpOrEmpty(dns2)) {
+        error = "the DNS servers must be IPv4 addresses or empty";
+        return false;
+    }
+    out.address = address;
+    out.subnet = subnet;
+    out.gateway = gateway;
+    out.dns1 = dns1;
+    out.dns2 = dns2;
+    return true;
+}
+
+bool WebUi::saveApSettings(AsyncWebServerRequest* request, String& error) {
+    if (!request->hasParam("apMode", true)) {
+        return true; // access point settings not part of this form
+    }
+    int32_t mode = -1;
+    int32_t timeout = -1;
+    int32_t grace = -1;
+    if (!parseApMode(postValue(request, "apMode"), mode)) {
+        error = "unknown access point mode";
+        return false;
+    }
+    if (!parseApSeconds(postValue(request, "apTimeout"), 0, timeout) ||
+        !parseApSeconds(postValue(request, "apGrace"), 1, grace)) {
+        error = "access point times must be whole seconds, at most a week";
+        return false;
+    }
+    const String passMode = postValue(request, "apPassMode");
+    const AsyncWebParameter* passParam = request->getParam("apPass", true);
+    const String password = passParam != nullptr ? passParam->value() : String();
+    const bool keepOwn = passMode == "custom" && password.isEmpty() &&
+                         settings_->getBool("apPassOwn") &&
+                         !settings_->getString("apPass").isEmpty();
+    if (passMode == "custom" && !keepOwn &&
+        (password.length() < kMinApPassword || password.length() > kMaxApPassword)) {
+        error = "the access point password needs 8 to 63 characters";
+        return false;
+    }
+    if (passMode != "default" && passMode != "open" && passMode != "custom") {
+        error = "unknown access point password choice";
+        return false;
+    }
+
+    settings_->set("apMode", static_cast<int>(mode));
+    settings_->set("apTimeout", static_cast<int>(timeout));
+    settings_->set("apGrace", static_cast<int>(grace));
+    settings_->set("apPassOwn", passMode != "default");
+    if (passMode == "open") {
+        settings_->set("apPass", "");
+    } else if (passMode == "custom" && !keepOwn) {
+        settings_->set("apPass", password);
+    }
+    return true;
+}
+
+void WebUi::handleSettingsPost(AsyncWebServerRequest* request) {
+    IpConfig ip;
+    String error;
+    if (!readIpConfig(request, ip, error)) {
+        sendResult(request, 400, error.c_str());
+        return;
+    }
+    // Validated as a whole before anything is stored, so a rejected form changes nothing.
+    if (request->hasParam("apMode", true) && config_->apLocked) {
+        sendResult(request, 403, "the access point settings are fixed in the firmware");
+        return;
+    }
+    if (!saveApSettings(request, error)) {
+        sendResult(request, 400, error.c_str());
         return;
     }
 
@@ -619,12 +880,6 @@ void WebUi::handleSettingsPost(AsyncWebServerRequest* request) {
     if (request->hasParam("ssid", true)) {
         settings_->set("ssid", postValue(request, "ssid"));
     }
-    if (request->hasParam("ip", true)) {
-        settings_->set("localIP", localIp);
-    }
-    if (request->hasParam("gateway", true)) {
-        settings_->set("gateway", gateway);
-    }
     // An empty password field means "keep the stored one"; clearing needs the explicit flag.
     const AsyncWebParameter* password = request->getParam("pass", true);
     if (postValue(request, "clearPass") == "true") {
@@ -633,9 +888,24 @@ void WebUi::handleSettingsPost(AsyncWebServerRequest* request) {
         settings_->set("password", password->value());
     }
 
+    // A new static address is tried out first, unless it comes from the access point, from
+    // where nobody could check that the device is reachable at its new address.
+    const bool changed = ip != wifi_->ipConfig();
+    const bool trial = changed && ip.isStatic && !arrivedViaAp(request);
+    if (changed) {
+        wifi_->saveIpConfig(ip, trial);
+    }
+
     log_->info("Settings changed via web interface, restarting");
     requestRestart(kRestartDelayMs);
-    sendResult(request, 200, "Saved. The device restarts and connects to the configured WiFi.");
+    JsonDocument doc;
+    doc["ok"] = true;
+    doc["trial"] = trial;
+    doc["address"] = ip.isStatic ? ip.address : String(); // where the device will answer
+    doc["trialSeconds"] = WifiManager::kIpTrialMs / 1000U;
+    doc["message"] = trial ? "Saved. The device restarts with the new address; confirm it there."
+                           : "Saved. The device restarts and connects to the configured WiFi.";
+    sendJson(request, 200, doc);
 }
 
 void WebUi::handleAutoUpdatesPost(AsyncWebServerRequest* request) {

@@ -45,10 +45,13 @@ const pu = (() => {
     terminal: '<rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M7 10l3 2.5L7 15M12.5 15H17"/>',
     chip: '<rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9.5 3v3M14.5 3v3M9.5 18v3M14.5 18v3M3 9.5h3M3 14.5h3M18 9.5h3M18 14.5h3"/>',
     menu: '<path d="M4 7h16M4 12h16M4 17h16"/>',
+    memory: '<ellipse cx="12" cy="6" rx="7" ry="2.8"/><path d="M5 6v12c0 1.5 3.1 2.8 7 2.8s7-1.3 7-2.8V6M5 12c0 1.5 3.1 2.8 7 2.8s7-1.3 7-2.8"/>',
+    reset: '<path d="M4 12a8 8 0 1 0 2.4-5.7M4 4v4.5h4.5"/>',
+    trash: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-12M9 7V4h6v3"/>',
     lock: '<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
   };
 
-  // Line icon by name: home, page, wifi, upload, terminal, chip, menu, lock.
+  // Line icon by name: home, page, wifi, upload, terminal, chip, menu, lock, memory, reset, trash.
   function icon(name) {
     const holder = document.createElement("span");
     holder.innerHTML = '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true">' + icons[name] + "</svg>";
@@ -69,22 +72,68 @@ const pu = (() => {
     toastTimer = setTimeout(() => { box.className = ""; }, isError ? 6000 : 2500);
   }
 
+  // Answers once `origin` (e.g. "http://192.168.1.20") responds. Other addresses than the
+  // page's own cannot be read (no CORS), but an opaque answer is enough to know it is up.
+  function probe(origin) {
+    if (origin === location.origin) {
+      return get("/api/pu/nav");
+    }
+    const abort = new AbortController();
+    const timer = setTimeout(() => abort.abort(), 3000);
+    return fetch(origin + "/pu/app.css", { mode: "no-cors", cache: "no-store", signal: abort.signal })
+      .finally(() => clearTimeout(timer));
+  }
+
   // After the device was told to restart: wait until it answers again, then reload the page.
-  function waitForRestart() {
+  // With `origins` the device may come back at another address: the first one that answers is
+  // opened at `path` (default: this page).
+  function waitForRestart(origins, path) {
     toast("Device is restarting...");
+    const candidates = [...new Set(origins && origins.length > 0 ? origins : [location.origin])];
+    const open = (origin) => {
+      if (origin === location.origin && !path) {
+        location.reload();
+      } else {
+        location.href = origin + (path || location.pathname + location.search);
+      }
+    };
     const poll = () => {
-      get("/api/pu/nav").then(() => location.reload()).catch(() => setTimeout(poll, 1000));
+      Promise.any(candidates.map((origin) => probe(origin).then(() => origin)))
+        .then(open).catch(() => setTimeout(poll, 1500));
     };
     setTimeout(poll, 4000);
+  }
+
+  // Per-browser preference; storage may be unavailable (private mode), then the default counts.
+  function remember(key, fallback, value) {
+    try {
+      if (value !== undefined) {
+        localStorage.setItem("pu." + key, JSON.stringify(value));
+        return value;
+      }
+      const stored = localStorage.getItem("pu." + key);
+      return stored === null ? fallback : JSON.parse(stored);
+    } catch (error) {
+      return value !== undefined ? value : fallback;
+    }
+  }
+
+  // Connects a checkbox to a remembered "wrap long lines" setting for `target` (default off).
+  function wrapToggle(checkbox, target) {
+    const apply = () => target.classList.toggle("nowrap", !checkbox.checked);
+    checkbox.checked = remember("wrapLines", false);
+    apply();
+    checkbox.addEventListener("change", () => { remember("wrapLines", false, checkbox.checked); apply(); });
   }
 
   const builtIn = [
     { path: "/settings", title: "Settings" },
     { path: "/update", title: "Update" },
     { path: "/console", title: "Console" },
+    { path: "/memory", title: "Memory" },
     { path: "/info", title: "Device info" },
   ];
-  const builtInIcons = { "/settings": "wifi", "/update": "upload", "/console": "terminal", "/info": "chip" };
+  const builtInIcons = { "/settings": "wifi", "/update": "upload", "/console": "terminal", "/memory": "memory", "/info": "chip" };
 
   let rail = null;
   let online = null;
@@ -127,5 +176,5 @@ const pu = (() => {
     }, 10000);
   });
 
-  return { get, post, el, icon, toast, waitForRestart };
+  return { get, post, el, icon, toast, waitForRestart, remember, wrapToggle };
 })();
