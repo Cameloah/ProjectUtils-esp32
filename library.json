@@ -1,6 +1,6 @@
 {
   "name": "ProjectUtils-esp32",
-  "version": "2.1.0",
+  "version": "2.1.1",
   "description": "ESP32 project starter: WiFi setup with captive portal, settings page, persistent typed settings, web serial console, RAM log, NTP time, ArduinoOTA and firmware updates from GitHub releases.",
   "keywords": "esp32, wifi, captive portal, ota, nvs, settings, web console, dashboard, logging",
   "repository": {

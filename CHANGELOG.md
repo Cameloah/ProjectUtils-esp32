@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.1.1
+
+### Fixed
+
+- CI failed on master: GitHub's runner installed an older clang-tidy (18) than the one used
+  locally (23.1.4), which reports different findings. CI now installs clang-tidy 23.1.4, and
+  `scripts/run_clang_tidy.py` warns when a different version is used. No changes to the
+  library code.
+
 ## 2.1.0
 
 ### Added
