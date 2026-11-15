@@ -44,6 +44,9 @@ class ProjectUtilsClass {
     const Config& config() const { return config_; }
 
   private:
+    String adminPassword() const;
+    bool handleUsbCommand(const String& line);
+
     Config config_;
     Console console_;
     RamLog log_;

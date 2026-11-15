@@ -1,5 +1,30 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Admin password set on the settings page and stored on the device, instead of in the code. It
+  stays out of the repository and the firmware file. Protects all pages, the API, the web console
+  and OTA uploads, as before.
+- `password --clear` on the USB serial console removes the admin password (recovery). Typed in
+  the web console it has no effect.
+- `Console::setLineFilter()` and `Console::poll()`: the console hands on input from the USB
+  stream line by line so the library can take out its own commands.
+
+### Changed
+
+- Login uses HTTP digest authentication; basic logins are refused, so the password never travels
+  readable over the network.
+- `Config::adminPassword` is deprecated (readable in the firmware file); it only applies while no
+  password is set on the device.
+- Settings page: the WiFi password box shows a stand-in while a password is stored; emptying it
+  means a network without password (the "Open network" switch is gone). `POST /api/pu/settings`:
+  `pass` is stored as sent, empty included; `clearPass` is gone. New `adminProtect`, `adminPass`.
+- Access point settings show the firmware's values directly instead of "Default: ...", without
+  the "Empty: ..." hints; the password is a switch. Memory page: plain type names in "Add".
+- Web pages wait through a restart that ends with a login prompt.
+
 ## 2.2.0
 
 ### Added

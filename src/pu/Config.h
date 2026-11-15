@@ -28,9 +28,10 @@ struct Config {
     bool apLocked = false;       ///< true = the settings page only shows the values above.
 
     // --- Security ---
-    /// When set, all web pages, the JSON API, the web console and ArduinoOTA require this password.
-    /// Empty = unprotected (anyone on the network can reconfigure and reflash the device).
+    /// User name for the admin login. The password is set on each device's settings page.
     String adminUser = "admin";
+    /// Deprecated: readable as plain text in the firmware file and the repository. Used only while
+    /// no password is set on the device. Will be removed in 3.0.
     String adminPassword;
 
     // --- Time ---

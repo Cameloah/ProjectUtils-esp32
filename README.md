@@ -252,13 +252,22 @@ Everything is set through `pu::Config` before calling `begin()`.
 
 ## Security
 
-Without `adminPassword`, anyone on the same network can change the WiFi settings, read the
-console and upload firmware. That is acceptable on a trusted home network and nowhere else; the
-device logs a warning at boot.
+The admin password is set on each device's settings page ("Admin password"), never in the code,
+so it ends up neither in your repository nor in the firmware file. Until one is set, anyone on
+the same network can change the WiFi settings, read the console and upload firmware; the device
+logs a warning at boot.
 
-With `config.adminPassword = "..."` all pages (yours included), the JSON API, the web console
-and ArduinoOTA uploads require it (user name `admin` unless changed). Protect your own routes
-the same way:
+With a password set, all pages (yours included), the JSON API, the web console and ArduinoOTA
+uploads require it (user name `admin`, or `config.adminUser`). The browser logs in with HTTP
+digest authentication, so the password never travels readable over the network; basic logins
+are refused. The password is stored on the device like the WiFi password and never sent to the
+browser.
+
+**Forgotten password:** type `password --clear` on the USB serial console (115200 baud). It
+removes the password at once (OTA uploads accept the change after the next restart). The same
+line typed in the web console has no effect, so this needs physical access to the device.
+
+Protect your own routes the same way:
 
 ```cpp
 ProjectUtils.server().on("/secret", HTTP_GET, [](AsyncWebServerRequest* request) {
@@ -269,8 +278,11 @@ ProjectUtils.server().on("/secret", HTTP_GET, [](AsyncWebServerRequest* request)
 });
 ```
 
-The stored WiFi password is never sent to the browser or printed. Two limits to be aware of:
-the web interface is plain HTTP, and downloads from GitHub do not verify the server certificate.
+Limits to be aware of: the web interface is plain HTTP, so page contents (settings, console)
+are readable on the network even though the password is not; and downloads from GitHub do not
+verify the server certificate. For access from outside your home network, use a VPN rather than
+opening a port on the router. `Config::adminPassword` still works but is deprecated: it is
+readable in the firmware file.
 
 ## Modules
 
@@ -343,7 +355,8 @@ switches to it. From a script:
 `curl -F file=@firmware.bin http://<device>/api/pu/update/upload`.
 
 **From PlatformIO:** `pio run -t upload --upload-port <devicename>.local`
-(plus `upload_flags = --auth=<adminPassword>` if a password is set).
+If an admin password is set, pass it without writing it into `platformio.ini`:
+`PLATFORMIO_UPLOAD_FLAGS=--auth=<password> pio run -t upload --upload-port <device>`.
 
 **From GitHub releases:** set `config.githubRepo`, then for every release
 
@@ -365,7 +378,7 @@ Used by the pages; requires the admin password if one is set.
 | `GET /api/pu/info` | Chip, memory, uptime, network details as JSON |
 | `GET /api/pu/log` | RAM log as text |
 | `GET /api/pu/nav` | Menu entries |
-| `POST /api/pu/settings` | Form fields `deviceName`, `ssid`, `pass`, `clearPass`; `staticIP`, `ip`, `subnet`, `gateway`, `dns1`, `dns2`; `apMode`, `apTimeout`, `apGrace` (seconds), `apPassMode`, `apPass`. Restarts the device |
+| `POST /api/pu/settings` | Form fields `deviceName`, `ssid`, `pass` (stored as sent; empty = no password; leave out to keep); `adminProtect`, `adminPass`; `staticIP`, `ip`, `subnet`, `gateway`, `dns1`, `dns2`; `apMode`, `apTimeout`, `apGrace` (seconds), `apPassMode`, `apPass`. Restarts the device |
 | `POST /api/pu/network/confirm`, `POST /api/pu/network/revert` | Keep or undo a new static IP address while it is being tried out |
 | `POST /api/pu/wifi/scan`, `GET /api/pu/wifi/scan` | Start a network search; read its result |
 | `POST /api/pu/update/upload?type=firmware\|filesystem` | Upload and install a file (multipart form). Optional `size`, `md5` |
@@ -445,7 +458,7 @@ python3 scripts/run_clang_tidy.py
 
 `integration/` holds a pytest suite that talks to a real ESP32 running `examples/basic` over
 WiFi: all pages and the JSON API, the home page elements, web console, network search, firmware
-upload, and (optionally) restarts, stored settings and the admin login. It cannot run on GitHub Actions; run it before a release.
+upload, the memory page, and (optionally) restarts, stored settings and the admin login. It cannot run on GitHub Actions; run it before a release.
 
 Flash the example once over USB and connect the board to your WiFi. From then on:
 
@@ -457,12 +470,10 @@ devtest --device 192.168.1.210 --disruptive        # also restart and save setti
 devtest --device 192.168.1.210 --flash esp32s3     # build and flash over WiFi first
 ```
 
-To test the admin login, let the suite build a protected firmware, and remove it afterwards:
-
-```sh
-devtest --device 192.168.1.210 --flash esp32s3 --admin-password test1234
-devtest --device 192.168.1.210 --flash esp32s3 --ota-password test1234    # back to open
-```
+The admin login tests (with `--disruptive`) set a password on the device and remove it again
+afterwards. With the board also on USB, `--serial /dev/ttyACM0` adds the recovery test
+(`password --clear` over USB). If the device has a password set already, pass it with
+`--admin-password`.
 
 The suite can also open every page in a headless browser and click through it (menu, buttons,
 hold button, console). That needs Playwright; without it those tests are skipped:

@@ -76,7 +76,12 @@ const pu = (() => {
   // page's own cannot be read (no CORS), but an opaque answer is enough to know it is up.
   function probe(origin) {
     if (origin === location.origin) {
-      return get("/api/pu/nav");
+      // asking for a login (a password was just set) also means the device is back
+      return get("/api/pu/nav").catch((error) => {
+        if (error.status !== 401) {
+          throw error;
+        }
+      });
     }
     const abort = new AbortController();
     const timer = setTimeout(() => abort.abort(), 3000);

@@ -30,9 +30,9 @@ def test_saved_settings_survive_the_restart_and_keep_wifi_credentials(device):
     new_name = original["deviceName"] + " renamed"
     boot = device.boot_number()
     try:
-        # Only the name is sent, the way the page sends an empty password field: WiFi name and
-        # password must stay as they are, otherwise the device would not come back.
-        response = device.post("/api/pu/settings", {"deviceName": new_name, "pass": ""})
+        # Only the name is sent, the way the page does while the password box is untouched:
+        # WiFi name and password must stay as they are, otherwise the device would not come back.
+        response = device.post("/api/pu/settings", {"deviceName": new_name})
         assert response.status_code == 200
         assert response.json()["ok"] is True
 
