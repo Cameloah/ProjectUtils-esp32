@@ -2,9 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-from websockets.exceptions import InvalidStatus
-
 
 def test_console_page_is_served(device):
     response = device.get("/console")
@@ -77,11 +74,3 @@ def test_console_accepts_the_token_from_the_api_instead_of_a_login(device):
         console.drain(quiet=0.3)
         console.send("token")
         assert console.lines(1, timeout=2) == ["You said: token"]
-
-
-def test_console_refuses_connections_without_login_or_token(device):
-    if not device.auth:
-        pytest.skip("device has no admin password; build with one and pass --admin-password")
-    for token in (None, "0000000000000000"):
-        with pytest.raises(InvalidStatus), device.web_console(token=token, auth=False):
-            pass

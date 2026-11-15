@@ -2,37 +2,40 @@
 
 from __future__ import annotations
 
-import base64
 import re
 import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 
 import requests
+from requests.auth import HTTPDigestAuth
 from websockets.sync.client import ClientConnection, connect
 
 _BOOT_NUMBER = re.compile(r"Boot number (\d+)")
 
 
 class Device:
-    """HTTP access to the device, with the admin login applied if one is configured."""
+    """HTTP access to the device, with the admin login (digest) applied if a password is set."""
 
     def __init__(self, host: str, user: str, password: str | None) -> None:
         self.host = host
         self.base = f"http://{host}"
         self.auth = (user, password) if password else None
 
+    def _login(self, auth: bool):
+        return HTTPDigestAuth(*self.auth) if auth and self.auth else None
+
     def get(self, path: str, *, auth: bool = True, **kwargs) -> requests.Response:
         kwargs.setdefault("timeout", 5)
-        return requests.get(self.base + path, auth=self.auth if auth else None, **kwargs)
+        kwargs.setdefault("auth", self._login(auth))
+        return requests.get(self.base + path, **kwargs)
 
     def post(
         self, path: str, data: dict | None = None, *, auth: bool = True, **kwargs
     ) -> requests.Response:
         kwargs.setdefault("timeout", 5)
-        return requests.post(
-            self.base + path, data=data or {}, auth=self.auth if auth else None, **kwargs
-        )
+        kwargs.setdefault("auth", self._login(auth))
+        return requests.post(self.base + path, data=data or {}, **kwargs)
 
     def json(self, path: str) -> dict:
         response = self.get(path)
@@ -69,13 +72,11 @@ class Device:
 
     @contextmanager
     def web_console(self, *, token: str | None = None, auth: bool = True) -> Iterator[WebConsole]:
-        """Opens the console websocket, logging in with the admin password or a token."""
-        headers = {}
-        if self.auth and auth:
-            credentials = base64.b64encode(":".join(self.auth).encode()).decode()
-            headers["Authorization"] = f"Basic {credentials}"
+        """Opens the console websocket with a token, fetched with the admin login if not given."""
+        if token is None and self.auth and auth:
+            token = self.json("/api/pu/console/token")["token"]
         url = f"ws://{self.host}/api/pu/console/ws" + (f"?token={token}" if token else "")
-        with connect(url, additional_headers=headers) as socket:
+        with connect(url) as socket:
             yield WebConsole(socket)
 
 

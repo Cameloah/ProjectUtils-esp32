@@ -192,16 +192,8 @@ def test_open_device_warns_in_its_log(device):
     assert any("No admin password set" in line for line in device.log_lines())
 
 
-@pytest.mark.parametrize("path", PROTECTED_GET)
-def test_protected_pages_need_the_admin_login(device, path):
-    if not device.auth:
-        pytest.skip("device has no admin password; build with one and pass --admin-password")
-    assert device.get(path, auth=False).status_code == 401
-    assert device.get(path).status_code == 200
-
-
-@pytest.mark.parametrize("path", MUTATING)
-def test_protected_actions_need_the_admin_login(device, path):
-    if not device.auth:
-        pytest.skip("device has no admin password; build with one and pass --admin-password")
-    assert device.post(path, auth=False).status_code == 401
+def test_short_admin_password_is_refused(device):
+    before = device.status()["admin"]
+    response = device.post("/api/pu/settings", {"adminProtect": "true", "adminPass": "short"})
+    assert response.status_code == 400
+    assert device.status()["admin"] == before

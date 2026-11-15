@@ -176,8 +176,7 @@ def test_settings_page_shows_current_values_and_no_password(page, device):
     page.wait_for_function("document.getElementById('ssid').value !== ''")
     assert page.input_value("#deviceName") == status["deviceName"]
     assert page.input_value("#ssid") == status["wifi"]["ssid"]
-    assert page.input_value("#pass") == ""
-    assert page.get_attribute("#pass", "placeholder") == "unchanged"
+    assert page.input_value("#pass") == "\u2022" * 8  # a stand-in, never the password
 
 
 def test_settings_page_lists_networks_and_fills_in_the_chosen_one(page, device):
@@ -204,15 +203,20 @@ def test_settings_page_shows_address_and_access_point(page, device):
         page.check("#staticIP")  # switching on prefills what the router handed out
         assert page.input_value("#ip") == status["address"]["current"]["ip"]
         assert page.input_value("#subnet") == status["address"]["current"]["subnet"]
-    assert page.input_value("#apMode") == status["ap"]["own"]["mode"]
-    page.select_option("#apPassMode", "custom")
+    own = status["ap"]["own"]["mode"]
+    assert page.input_value("#apMode") == (
+        status["ap"]["defaults"]["mode"] if own == "default" else own
+    )
+    page.check("#apPassOn")
     assert page.is_visible("#apPass")
     page.select_option("#apMode", "always")
     assert page.is_hidden("#apGraceRow")
     page.select_option("#apMode", "failure")
     assert page.is_visible("#apGraceRow")
     page.click("#apReset")
-    assert page.input_value("#apMode") == "default"
+    assert page.input_value("#apMode") == status["ap"]["defaults"]["mode"]
+    assert page.is_checked("#apPassOn") == status["ap"]["defaults"]["passwordSet"]
+    assert page.is_hidden("#adminFields") != status["admin"]["set"]
     assert page.problems == []
 
 

@@ -29,6 +29,11 @@ struct IpConfig;
 /// check, flashing, restart) is only requested there and carried out by loop().
 class WebUi {
   public:
+    /// Settings key of the admin password set on the settings page (secret).
+    static constexpr const char* kAdminPasswordKey = "adminPass";
+    /// Registers the admin password key in the library settings. Before settings.loadAll().
+    static void defineSettings(Settings& settings);
+
     void begin(const Config& config, Settings& settings, WifiManager& wifi, GithubUpdater& updater,
                RamLog& log, Console& console, Clock& clock);
 
@@ -69,6 +74,8 @@ class WebUi {
                     bool isProtected);
     Page* findPage(AsyncWebServerRequest* request, bool post);
     bool hasCredentials(AsyncWebServerRequest* request) const;
+    String adminPassword() const;
+    bool saveAdminPassword(AsyncWebServerRequest* request, bool write, String& error);
 
     void beginConsole(Console& console);
     void pumpConsole();

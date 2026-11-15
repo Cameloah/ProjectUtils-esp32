@@ -19,6 +19,8 @@ namespace pu {
 
 namespace {
 const uint32_t kRestartDelayMs = 1500; // enough for the HTTP reply to reach the browser
+const char kRealm[] = "ProjectUtils";  // shown by the browser's login prompt
+const size_t kMinAdminPassword = 8;
 const char kJson[] = "application/json";
 const char kHtml[] = "text/html";
 const size_t kConsoleLineSize = 256;        // longer lines reach the web console in pieces
@@ -175,16 +177,32 @@ void WebUi::begin(const Config& config, Settings& settings, WifiManager& wifi,
     server_.begin();
 }
 
+void WebUi::defineSettings(Settings& settings) {
+    settings.define(kAdminPasswordKey, "");
+    settings.markSecret(kAdminPasswordKey);
+}
+
+String WebUi::adminPassword() const {
+    const String stored = settings_->getString(kAdminPasswordKey);
+    return stored.isEmpty() ? config_->adminPassword : stored;
+}
+
 bool WebUi::hasCredentials(AsyncWebServerRequest* request) const {
-    return config_ == nullptr || config_->adminPassword.isEmpty() ||
-           request->authenticate(config_->adminUser.c_str(), config_->adminPassword.c_str());
+    if (config_ == nullptr) {
+        return true;
+    }
+    const String password = adminPassword();
+    // Digest only: a basic login would carry the password readable over plain HTTP.
+    return password.isEmpty() ||
+           (request->authType() == AsyncAuthType::AUTH_DIGEST &&
+            request->authenticate(config_->adminUser.c_str(), password.c_str(), kRealm));
 }
 
 bool WebUi::authorize(AsyncWebServerRequest* request) const {
     if (hasCredentials(request)) {
         return true;
     }
-    request->requestAuthentication();
+    request->requestAuthentication(AsyncAuthType::AUTH_DIGEST, kRealm);
     return false;
 }
 
@@ -760,6 +778,11 @@ void WebUi::handleStatus(AsyncWebServerRequest* request) const {
                       : settings_->getString("apPass").isEmpty() ? "open"
                                                                  : "custom";
 
+    JsonObject admin = doc["admin"].to<JsonObject>();
+    admin["user"] = config_->adminUser;
+    admin["set"] = !settings_->getString(kAdminPasswordKey).isEmpty(); // never the password
+    admin["firmware"] = !config_->adminPassword.isEmpty();
+
     JsonObject updateJson = doc["update"].to<JsonObject>();
     updateJson["configured"] = updater_->configured();
     updateJson["state"] = GithubUpdater::stateName(update.state);
@@ -857,10 +880,40 @@ bool WebUi::saveApSettings(AsyncWebServerRequest* request, String& error) {
     return true;
 }
 
+bool WebUi::saveAdminPassword(AsyncWebServerRequest* request, bool write, String& error) {
+    if (!request->hasParam("adminProtect", true)) {
+        return true; // not part of this form
+    }
+    const bool protect = postValue(request, "adminProtect") == "true";
+    const AsyncWebParameter* param = request->getParam("adminPass", true);
+    const String password = param != nullptr ? param->value() : String();
+    if (!protect) {
+        if (write) {
+            settings_->set(kAdminPasswordKey, "");
+        }
+        return true;
+    }
+    if (password.isEmpty()) {
+        if (settings_->getString(kAdminPasswordKey).isEmpty()) {
+            error = "enter an admin password";
+            return false;
+        }
+        return true; // keep the one that is set
+    }
+    if (password.length() < kMinAdminPassword) {
+        error = "the admin password needs at least 8 characters";
+        return false;
+    }
+    if (write) {
+        settings_->set(kAdminPasswordKey, password);
+    }
+    return true;
+}
+
 void WebUi::handleSettingsPost(AsyncWebServerRequest* request) {
     IpConfig ip;
     String error;
-    if (!readIpConfig(request, ip, error)) {
+    if (!readIpConfig(request, ip, error) || !saveAdminPassword(request, false, error)) {
         sendResult(request, 400, error.c_str());
         return;
     }
@@ -880,13 +933,12 @@ void WebUi::handleSettingsPost(AsyncWebServerRequest* request) {
     if (request->hasParam("ssid", true)) {
         settings_->set("ssid", postValue(request, "ssid"));
     }
-    // An empty password field means "keep the stored one"; clearing needs the explicit flag.
+    // Sent only when changed on the page; empty = a network without password.
     const AsyncWebParameter* password = request->getParam("pass", true);
-    if (postValue(request, "clearPass") == "true") {
-        settings_->set("password", "");
-    } else if (password != nullptr && !password->value().isEmpty()) {
+    if (password != nullptr) {
         settings_->set("password", password->value());
     }
+    saveAdminPassword(request, true, error);
 
     // A new static address is tried out first, unless it comes from the access point, from
     // where nobody could check that the device is reachable at its new address.

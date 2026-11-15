@@ -345,7 +345,12 @@ const pu = (() => {
   // page's own cannot be read (no CORS), but an opaque answer is enough to know it is up.
   function probe(origin) {
     if (origin === location.origin) {
-      return get("/api/pu/nav");
+      // asking for a login (a password was just set) also means the device is back
+      return get("/api/pu/nav").catch((error) => {
+        if (error.status !== 401) {
+          throw error;
+        }
+      });
     }
     const abort = new AbortController();
     const timer = setTimeout(() => abort.abort(), 3000);
@@ -703,10 +708,10 @@ static const char kWebMemoryHtml[] PROGMEM = R"PUWEB(<!DOCTYPE html>
         <label>Name<input type="text" class="data" id="addKey" maxlength="15" placeholder="up to 15 characters"
           autocapitalize="off" spellcheck="false"></label>
         <label>Type<select id="addType">
-          <option value="int">Whole number (int)</option>
-          <option value="float">Decimal number (float)</option>
-          <option value="bool">On / off (bool)</option>
-          <option value="text" selected>Text</option>
+          <option value="int">int</option>
+          <option value="float">float</option>
+          <option value="bool">bool</option>
+          <option value="text" selected>text</option>
         </select></label>
         <label id="addValueBox">Value<input type="text" class="data" id="addValue" autocapitalize="off" spellcheck="false"></label>
         <label id="addFlagBox" hidden>Value<span class="switch"><input type="checkbox" id="addFlag" aria-label="Value"><span></span></span></label>
@@ -1203,11 +1208,7 @@ static const char kWebSettingsHtml[] PROGMEM = R"PUWEB(<!DOCTYPE html>
       </div>
       <div class="row">
         <label class="label" for="pass">Password</label>
-        <div class="control"><input type="password" id="pass" name="pass" maxlength="64" autocomplete="off"></div>
-      </div>
-      <div class="row">
-        <span class="label">Open network<small>The network needs no password</small></span>
-        <label class="switch"><input type="checkbox" id="clearPass" aria-label="Open network"><span></span></label>
+        <div class="control"><input type="password" id="pass" maxlength="64" autocomplete="off"></div>
       </div>
       <div class="actions"><button type="button" id="scan">Search for networks</button></div>
     </div>
@@ -1234,7 +1235,7 @@ static const char kWebSettingsHtml[] PROGMEM = R"PUWEB(<!DOCTYPE html>
           <div class="control"><input type="text" class="data" id="gateway" name="gateway" inputmode="decimal"></div>
         </div>
         <div class="row">
-          <label class="label" for="dns1">DNS server<small>Empty: the gateway</small></label>
+          <label class="label" for="dns1">DNS server</label>
           <div class="control"><input type="text" class="data" id="dns1" name="dns1" inputmode="decimal"></div>
         </div>
         <div class="row">
@@ -1257,22 +1258,40 @@ static const char kWebSettingsHtml[] PROGMEM = R"PUWEB(<!DOCTYPE html>
         <div class="control"><select class="wide" id="apMode"></select></div>
       </div>
       <div class="row" id="apGraceRow">
-        <label class="label" for="apGrace">Open after WiFi is lost for<small id="apGraceHint"></small></label>
+        <label class="label" for="apGrace">Open after WiFi is lost for</label>
         <div class="control"><input type="number" id="apGrace" min="1" step="1"><span class="unit">min</span></div>
       </div>
       <div class="row">
-        <label class="label" for="apTimeout">Close when unused for<small id="apTimeoutHint"></small></label>
+        <label class="label" for="apTimeout">Close when unused for</label>
         <div class="control"><input type="number" id="apTimeout" min="0" step="1"><span class="unit">min</span></div>
       </div>
       <div class="row">
-        <label class="label" for="apPassMode">Password</label>
-        <div class="control"><select class="wide" id="apPassMode"></select></div>
+        <span class="label">Password</span>
+        <label class="switch"><input type="checkbox" id="apPassOn" aria-label="Access point password"><span></span></label>
       </div>
       <div class="row" id="apPassRow" hidden>
         <label class="label" for="apPass">Access point password<small>8 to 63 characters</small></label>
         <div class="control"><input type="password" id="apPass" maxlength="63" autocomplete="new-password"></div>
       </div>
       <div class="actions" id="apActions"><button type="button" id="apReset">Use firmware defaults</button></div>
+    </div>
+  </div>
+
+  <div class="group">
+    <p class="eyebrow">Admin password</p>
+    <div class="panel">
+      <div class="row">
+        <span class="label">Require a password<small id="adminSummary">For all pages, the API and uploads over WiFi</small></span>
+        <label class="switch"><input type="checkbox" id="adminProtect" aria-label="Require a password"><span></span></label>
+      </div>
+      <div class="rows" id="adminFields" hidden>
+        <div class="row">
+          <label class="label" for="adminPass">Password<small>At least 8 characters</small></label>
+          <div class="control"><input type="password" id="adminPass" autocomplete="new-password"></div>
+        </div>
+        <div class="phase">The login name is <b class="data" id="adminUser">admin</b>. Forgotten password:
+          type <span class="data">password --clear</span> on the USB serial console.</div>
+      </div>
     </div>
   </div>
 
@@ -1290,6 +1309,10 @@ static const char kWebSettingsHtml[] PROGMEM = R"PUWEB(<!DOCTYPE html>
   let connectedTo = "";
 
   const modeText = { never: "Never (only without WiFi)", failure: "On WiFi failure", always: "Always" };
+  // Shown in the WiFi password box while a password is stored; never the password itself.
+  const storedPassword = "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022";
+  let passChanged = false;
+  let apPassDefault = false; // "Use firmware defaults" was chosen for the access point password
   const minutes = (seconds) => {
     const value = seconds / 60;
     return Number.isInteger(value) ? String(value) : value.toFixed(1);
@@ -1300,15 +1323,31 @@ static const char kWebSettingsHtml[] PROGMEM = R"PUWEB(<!DOCTYPE html>
     status = result;
     byId("deviceName").value = status.deviceName;
     byId("ssid").value = status.wifi.ssid;
-    byId("pass").placeholder = status.wifi.passwordSet ? "unchanged" : "";
+    byId("pass").value = status.wifi.passwordSet ? storedPassword : "";
     connectedTo = status.wifi.connected ? status.wifi.ssid : "";
     showAddress(status.address);
     showAccessPoint(status.ap);
+    showAdmin(status.admin);
   }).catch((error) => pu.toast(error.message, true));
 
-  byId("clearPass").addEventListener("change", (event) => {
-    byId("pass").disabled = event.target.checked;
-  });
+  // An empty box means a network without password; untouched, the stored one stays.
+  byId("pass").addEventListener("focus", (event) => event.target.select());
+  byId("pass").addEventListener("input", () => { passChanged = true; });
+
+  // ---- admin password ----
+  function showAdmin(admin) {
+    byId("adminUser").textContent = admin.user;
+    byId("adminProtect").checked = admin.set || admin.firmware;
+    byId("adminPass").placeholder = admin.set ? "unchanged" : "";
+    if (admin.firmware && !admin.set) {
+      byId("adminSummary").textContent = "A password from the firmware is in use; set one here to replace it";
+    }
+    updateAdminFields();
+  }
+  function updateAdminFields() {
+    byId("adminFields").hidden = !byId("adminProtect").checked;
+  }
+  byId("adminProtect").addEventListener("change", updateAdminFields);
 
   // ---- IP address ----
   function showAddress(address) {
@@ -1393,19 +1432,15 @@ static const char kWebSettingsHtml[] PROGMEM = R"PUWEB(<!DOCTYPE html>
           pu.el("dt", null, "Password"), pu.el("dd", null, active.passwordSet ? "set" : "none (open network)")));
       return;
     }
-    options(byId("apMode"), [
-      ["default", "Default: " + modeText[defaults.mode]],
-      ["never", modeText.never], ["failure", modeText.failure], ["always", modeText.always]], own.mode);
-    byId("apTimeout").placeholder = minutes(defaults.timeout);
+    // the firmware's value is shown as long as this device has not changed it
+    options(byId("apMode"), [["never", modeText.never], ["failure", modeText.failure], ["always", modeText.always]],
+      own.mode === "default" ? defaults.mode : own.mode);
+    byId("apTimeout").placeholder = defaults.timeout === 0 ? "never" : minutes(defaults.timeout);
     byId("apTimeout").value = own.timeout >= 0 ? minutes(own.timeout) : "";
-    byId("apTimeoutHint").textContent = "Empty: firmware default (" + duration(defaults.timeout) + "). 0: never";
     byId("apGrace").placeholder = minutes(defaults.grace);
     byId("apGrace").value = own.grace >= 0 ? minutes(own.grace) : "";
-    byId("apGraceHint").textContent = "Empty: firmware default (" + duration(defaults.grace) + ")";
-    options(byId("apPassMode"), [
-      ["default", "Default: " + (defaults.passwordSet ? "set" : "none")],
-      ["open", "None (open network)"], ["custom", "Own password"]], own.password);
-    byId("apPass").placeholder = own.password === "custom" ? "unchanged" : "";
+    byId("apPassOn").checked = ap.active.passwordSet;
+    byId("apPass").placeholder = ap.active.passwordSet ? "unchanged" : "";
     updateApFields();
   }
 
@@ -1413,20 +1448,38 @@ static const char kWebSettingsHtml[] PROGMEM = R"PUWEB(<!DOCTYPE html>
     if (!status || status.ap.locked) {
       return;
     }
-    const chosen = byId("apMode").value;
-    const mode = chosen === "default" ? status.ap.defaults.mode : chosen;
-    byId("apGraceRow").hidden = mode !== "failure";
-    byId("apPassRow").hidden = byId("apPassMode").value !== "custom";
+    byId("apGraceRow").hidden = byId("apMode").value !== "failure";
+    byId("apPassRow").hidden = !byId("apPassOn").checked;
   }
   byId("apMode").addEventListener("change", updateApFields);
-  byId("apPassMode").addEventListener("change", updateApFields);
+  byId("apPassOn").addEventListener("change", () => { apPassDefault = false; updateApFields(); });
+  byId("apPass").addEventListener("input", () => { apPassDefault = false; });
+
+  // What to store for the access point password: "default", "open" or "custom".
+  function apPassChoice() {
+    const ap = status.ap;
+    const on = byId("apPassOn").checked;
+    const typed = byId("apPass").value !== "";
+    if (apPassDefault) {
+      return "default";
+    }
+    if (!on) {
+      return ap.defaults.passwordSet ? "open" : "default";
+    }
+    if (typed || ap.own.password === "custom") {
+      return "custom"; // empty box: keep this device's own password
+    }
+    return ap.defaults.passwordSet ? "default" : "custom"; // custom without text: the device asks for one
+  }
 
   byId("apReset").addEventListener("click", () => {
-    byId("apMode").value = "default";
+    const defaults = status.ap.defaults;
+    byId("apMode").value = defaults.mode;
     byId("apTimeout").value = "";
     byId("apGrace").value = "";
-    byId("apPassMode").value = "default";
+    byId("apPassOn").checked = defaults.passwordSet;
     byId("apPass").value = "";
+    apPassDefault = true;
     updateApFields();
     pu.toast("Firmware defaults chosen. Save to apply them.");
   });
@@ -1453,9 +1506,11 @@ static const char kWebSettingsHtml[] PROGMEM = R"PUWEB(<!DOCTYPE html>
         type: "button",
         className: "row net" + (network.ssid === byId("ssid").value ? " chosen" : ""),
         onclick: () => {
+          if (network.ssid !== byId("ssid").value || !network.secure) {
+            byId("pass").value = ""; // another network: its own password, or none
+            passChanged = true;
+          }
           byId("ssid").value = network.ssid;
-          byId("clearPass").checked = !network.secure;
-          byId("pass").disabled = !network.secure;
           list.querySelectorAll(".net").forEach((other) => other.classList.toggle("chosen", other === entry));
           if (network.secure) { byId("pass").focus(); }
         },
@@ -1500,18 +1555,22 @@ static const char kWebSettingsHtml[] PROGMEM = R"PUWEB(<!DOCTYPE html>
   byId("settingsForm").addEventListener("submit", (event) => {
     event.preventDefault();
     const form = new FormData(event.target);
-    if (byId("clearPass").checked) {
-      form.set("clearPass", "true");
+    if (passChanged) {
+      form.set("pass", byId("pass").value);
     }
     form.set("staticIP", byId("staticIP").checked ? "true" : "false");
     if (status && !status.ap.locked) {
       const seconds = (id) => (byId(id).value === "" ? "" : String(Math.round(Number(byId(id).value) * 60)));
-      form.set("apMode", byId("apMode").value);
+      const mode = byId("apMode").value;
+      // the firmware's mode stays "default", so it follows a changed default in a later firmware
+      form.set("apMode", mode === status.ap.defaults.mode ? "default" : mode);
       form.set("apTimeout", seconds("apTimeout"));
       form.set("apGrace", seconds("apGrace"));
-      form.set("apPassMode", byId("apPassMode").value);
+      form.set("apPassMode", apPassChoice());
       form.set("apPass", byId("apPass").value);
     }
+    form.set("adminProtect", byId("adminProtect").checked ? "true" : "false");
+    form.set("adminPass", byId("adminPass").value);
     const wasStatic = status && status.address.static;
     pu.post("/api/pu/settings", form).then((result) => {
       byId("formMessage").textContent = result.message;

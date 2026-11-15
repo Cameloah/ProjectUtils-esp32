@@ -25,18 +25,23 @@ def pytest_addoption(parser: pytest.Parser) -> None:
     group.addoption(
         "--admin-password",
         default=os.environ.get("PU_ADMIN_PASSWORD"),
-        help="admin password the firmware was built with, if any (or set PU_ADMIN_PASSWORD)",
+        help="admin password set on the device, if any (or set PU_ADMIN_PASSWORD)",
     )
     group.addoption(
         "--flash",
         metavar="ENV",
-        help="build this environment of examples/basic (with --admin-password compiled in, "
-        "if given) and flash it over WiFi before testing",
+        help="build this environment of examples/basic and flash it over WiFi before testing",
     )
     group.addoption(
         "--ota-password",
-        help="admin password of the firmware currently on the device, if it differs from "
-        "--admin-password (only needed together with --flash)",
+        help="password for the upload over WiFi, if it differs from --admin-password "
+        "(only needed together with --flash)",
+    )
+    group.addoption(
+        "--serial",
+        default=os.environ.get("PU_SERIAL"),
+        help="USB serial port of the device (e.g. /dev/ttyACM0) for the tests that need "
+        "physical access (or set PU_SERIAL)",
     )
     group.addoption(
         "--disruptive",
@@ -72,9 +77,6 @@ def _flash(env: str, device: Device, current: Device) -> None:
     command = ["pio", "run", "-d", "examples/basic", "-e", env, "-t", "upload"]
     command += ["--upload-port", device.host]
     environment = dict(os.environ)
-    if device.auth:
-        define = f'-DPU_EXAMPLE_ADMIN_PASSWORD=\\"{device.auth[1]}\\"'
-        environment["PLATFORMIO_BUILD_FLAGS"] = define
     if current.auth:
         environment["PLATFORMIO_UPLOAD_FLAGS"] = f"--auth={current.auth[1]}"
     subprocess.run(command, cwd=REPO, env=environment, check=True)
