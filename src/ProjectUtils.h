@@ -39,6 +39,10 @@ class ProjectUtilsClass {
     Clock& clock() { return clock_; }
     GithubUpdater& updater() { return updater_; }
     WebUi& web() { return web_; }
+
+    /// Erases everything stored in flash (WiFi, admin password, all settings) and restarts into
+    /// the setup access point. The firmware stays. Call from loop(), e.g. for a reset button.
+    void factoryReset() { web_.factoryReset(); }
     /// Web server for the project's own routes; register them after begin().
     AsyncWebServer& server() { return web_.server(); }
     const Config& config() const { return config_; }

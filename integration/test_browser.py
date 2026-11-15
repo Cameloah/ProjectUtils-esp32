@@ -248,6 +248,18 @@ def test_memory_page_lists_entries_with_reset_and_delete_buttons(page, device):
     assert page.problems == []
 
 
+def test_factory_reset_button_waits_for_the_device_name(page, device):
+    name = device.status()["deviceName"]
+    page.goto("/info")
+    page.wait_for_function("document.getElementById('resetHint').textContent !== ''")
+    assert page.is_disabled("#factoryReset")
+    page.fill("#resetName", name[:-1])
+    assert page.is_disabled("#factoryReset")
+    page.fill("#resetName", name)
+    assert page.is_enabled("#factoryReset")  # not clicked: it would wipe the test board
+    assert page.problems == []
+
+
 def test_console_uses_the_whole_width(browser, device):
     credentials = {"username": device.auth[0], "password": device.auth[1]} if device.auth else None
     context = browser.new_context(

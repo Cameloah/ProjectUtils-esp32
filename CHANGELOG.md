@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Factory reset on the Device info page: erases everything stored in flash (WiFi, admin password,
+  all settings) and restarts into the setup access point. Confirmed by typing the device name,
+  which the device checks as well. `POST /api/pu/factory-reset` with `confirm`, and
+  `ProjectUtils.factoryReset()` for the project's own code (e.g. a reset button).
+- `WifiManager::defaultName()`; `/api/pu/info` reports it as `defaultName`.
+
+### Fixed
+
+- "Search for networks" while the setup access point is open: a search then takes longer than
+  the 6 s after which the Arduino core reports a failure, so the page showed "No networks found";
+  and while the device kept trying to reach a stored but unreachable network, the search could
+  not start at all. Searches now count as running for up to 15 s, a second request joins a
+  running search, and connection attempts pause while searching.
+
 ## 2.3.0
 
 ### Added

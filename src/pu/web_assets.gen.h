@@ -195,6 +195,7 @@ button.net { width: 100%; height: auto; border: 0; border-radius: 0; background:
 button.net:hover { background: var(--raised); }
 button.net.chosen .label { color: var(--accent); font-weight: 600; }
 .notice { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); background: color-mix(in srgb, var(--accent) 7%, var(--surface)); }
+.panel.danger { border-color: color-mix(in srgb, var(--bad) 40%, var(--line)); }
 .notice.warn { border-color: color-mix(in srgb, var(--warn) 50%, var(--line)); background: color-mix(in srgb, var(--warn) 8%, var(--surface)); }
 .tag { font-size: 12px; color: var(--muted); border: 1px solid var(--line); border-radius: 20px; padding: 2px 8px; }
 .tag.good { color: var(--good); border-color: color-mix(in srgb, var(--good) 40%, var(--line)); }
@@ -601,6 +602,23 @@ static const char kWebInfoHtml[] PROGMEM = R"PUWEB(<!DOCTYPE html>
     <div class="panel"><pre class="log" id="log"></pre></div>
   </div>
   <div class="control" id="restartBox"></div>
+
+  <div class="group">
+    <p class="eyebrow">Factory reset</p>
+    <div class="panel danger">
+      <div class="row"><span class="label">Erase all stored values<small>WiFi, admin password, access point
+        and all settings of this device. The firmware stays. Afterwards the device restarts and opens its
+        access point <b id="defaultName"></b> to be set up again.</small></span></div>
+      <div class="row">
+        <label class="label" for="resetName">Type the device name to confirm<small class="data" id="resetHint"></small></label>
+        <div class="control">
+          <input type="text" id="resetName" autocomplete="off" autocapitalize="off" spellcheck="false">
+          <button type="button" class="red" id="factoryReset" disabled>Factory reset</button>
+        </div>
+      </div>
+      <div class="phase" id="resetDone" hidden></div>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -614,7 +632,13 @@ static const char kWebInfoHtml[] PROGMEM = R"PUWEB(<!DOCTYPE html>
     return (days > 0 ? days + "d " : "") + clock;
   }
 
+  let deviceName = "";
+
   function showInfo(info) {
+    deviceName = info.deviceName;
+    byId("defaultName").textContent = "\u201c" + info.defaultName + "\u201d";
+    byId("resetHint").textContent = info.deviceName;
+    updateResetButton();
     byId("summary").textContent = info.chip + " · firmware " + info.firmware;
     byId("uptime").textContent = duration(info.uptimeSeconds);
     byId("heap").textContent = Math.round(info.heapFree / 1024);
@@ -667,6 +691,20 @@ static const char kWebInfoHtml[] PROGMEM = R"PUWEB(<!DOCTYPE html>
     }, "Restart device"));
   }
   restartIdle();
+
+  function updateResetButton() {
+    byId("factoryReset").disabled = byId("resetName").value.trim() !== deviceName || deviceName === "";
+  }
+  byId("resetName").addEventListener("input", updateResetButton);
+  byId("factoryReset").addEventListener("click", () => {
+    pu.post("/api/pu/factory-reset", { confirm: byId("resetName").value.trim() }).then((result) => {
+      byId("factoryReset").disabled = true;
+      byId("resetName").disabled = true;
+      byId("resetDone").hidden = false;
+      byId("resetDone").textContent = result.message + " Connect to the WiFi network \u201c" +
+        result.accessPoint + "\u201d and open 192.168.4.1/settings in the browser to set it up again.";
+    }).catch((error) => pu.toast(error.message, true));
+  });
 </script>
 </body>
 </html>

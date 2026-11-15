@@ -58,6 +58,11 @@ class WebUi {
     /// Restarts the device from loop() after the given delay. Safe from any task.
     void requestRestart(uint32_t delayMs);
 
+    /// Erases everything stored in flash (NVS: WiFi, admin password, all settings, also other
+    /// libraries' values) and restarts. The firmware and a file system partition stay. Call from
+    /// loop(), not from a request handler.
+    void factoryReset();
+
     /// Returns true if the request may proceed; otherwise an authentication challenge was sent.
     /// Use this to protect your own routes with the admin password.
     bool authorize(AsyncWebServerRequest* request) const;
@@ -114,6 +119,7 @@ class WebUi {
     std::atomic<bool> checkRequested_{false};
     std::atomic<bool> installRequested_{false};
     std::atomic<bool> restartRequested_{false};
+    std::atomic<bool> factoryResetRequested_{false};
     std::atomic<uint32_t> restartAtMs_{0};
     std::mutex installMutex_;
     String installTag_;

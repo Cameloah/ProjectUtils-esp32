@@ -5,6 +5,7 @@
 #include <WiFi.h>
 #include <esp_system.h>
 #include <esp_timer.h>
+#include <nvs_flash.h>
 
 #include "Clock.h"
 #include "Console.h"
@@ -204,6 +205,17 @@ bool WebUi::authorize(AsyncWebServerRequest* request) const {
     }
     request->requestAuthentication(AsyncAuthType::AUTH_DIGEST, kRealm);
     return false;
+}
+
+void WebUi::factoryReset() {
+    log_->warn("Factory reset: erasing all stored values and restarting");
+    console_->flush();
+    delay(100);                                // let the log line reach the console
+    const esp_err_t error = nvs_flash_erase(); // de-initialises NVS first; nothing is written after
+    if (error != ESP_OK) {
+        log_->error("Factory reset failed: %s", esp_err_to_name(error));
+    }
+    ESP.restart();
 }
 
 void WebUi::requestRestart(uint32_t delayMs) {
@@ -532,8 +544,7 @@ void WebUi::registerRoutes() {
         if (!authorize(request)) {
             return;
         }
-        WiFi.scanDelete();
-        if (WiFi.scanNetworks(true) == WIFI_SCAN_FAILED) {
+        if (!wifi_->startScan()) {
             sendResult(request, 503, "the search could not be started, try again");
         } else {
             sendResult(request, 202, "searching");
@@ -561,6 +572,24 @@ void WebUi::registerRoutes() {
         [this](AsyncWebServerRequest* request, const String& /*filename*/, size_t index,
                uint8_t* data, size_t length,
                bool final) { handleUploadChunk(request, index, data, length, final); });
+    server_.on("/api/pu/factory-reset", HTTP_POST, [this](AsyncWebServerRequest* request) {
+        if (!authorize(request)) {
+            return;
+        }
+        // The device name has to be typed to confirm, so a stray request cannot wipe the device.
+        if (postValue(request, "confirm") != wifi_->deviceName()) {
+            sendResult(request, 400, "type the device name to confirm");
+            return;
+        }
+        JsonDocument doc;
+        doc["ok"] = true;
+        doc["message"] =
+            "Erasing all stored values. The device restarts and opens its access point.";
+        doc["accessPoint"] = wifi_->defaultName();
+        sendJson(request, 202, doc);
+        factoryResetRequested_.store(true);
+        requestRestart(kRestartDelayMs);
+    });
     server_.on("/api/pu/restart", HTTP_POST, [this](AsyncWebServerRequest* request) {
         if (authorize(request)) {
             requestRestart(kRestartDelayMs);
@@ -613,6 +642,7 @@ void WebUi::handleInfo(AsyncWebServerRequest* request) const {
     JsonDocument doc;
     doc["deviceName"] = wifi_->deviceName();
     doc["hostname"] = wifi_->hostname();
+    doc["defaultName"] = wifi_->defaultName();
     doc["firmware"] = version;
     doc["connected"] = wifi_->isConnected();
     doc["mode"] = WifiManager::modeName();
@@ -638,7 +668,7 @@ void WebUi::handleInfo(AsyncWebServerRequest* request) const {
 }
 
 void WebUi::handleScanGet(AsyncWebServerRequest* request) const {
-    const int16_t count = WiFi.scanComplete();
+    const int16_t count = wifi_->scanStatus();
     JsonDocument doc;
     doc["scanning"] = count == WIFI_SCAN_RUNNING;
     JsonArray networks = doc["networks"].to<JsonArray>();
@@ -1001,6 +1031,9 @@ void WebUi::loop() {
         }
     }
     if (restartRequested_.load() && static_cast<int32_t>(millis() - restartAtMs_.load()) >= 0) {
+        if (factoryResetRequested_.load()) {
+            factoryReset(); // does not return
+        }
         ESP.restart();
     }
 }

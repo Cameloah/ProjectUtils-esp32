@@ -90,7 +90,7 @@ your project's pages first, then the built-in ones:
 | Update | `/update` | Upload a firmware or filesystem file; online updates if `githubRepo` is set |
 | Memory | `/memory` | Every stored value: change it, reset it to its default, delete leftovers, add new ones |
 | Console | `/console` | Serial output and input over the full window width, with timestamps, scroll lock, line wrap and download |
-| Device info | `/info` | Firmware, network, memory, uptime, reason of the last restart, log |
+| Device info | `/info` | Firmware, network, memory, uptime, reason of the last restart, log, factory reset |
 
 ### Static IP address
 
@@ -121,6 +121,17 @@ entries". Each entry shows its type and whether it is still at the firmware's de
   overwritten or reset.
 - Library entries that decide whether the device stays reachable (WiFi name and password, device
   name, IP settings) ask for confirmation first, and take effect after a restart.
+
+### Factory reset
+
+At the bottom of the Device info page: type the device name to confirm, and the device erases
+everything stored in flash (the whole NVS partition: WiFi, admin password, access point and all
+settings, including values other libraries store there), then restarts. With no WiFi stored it
+opens its setup access point, named after the firmware's default name (shown on the page).
+The firmware stays, as does a file system partition your project uses for files.
+
+From your own code, for example a long press on a button: `ProjectUtils.factoryReset()` (call it
+from `loop()`).
 
 ### Setup access point
 
@@ -386,6 +397,7 @@ Used by the pages; requires the admin password if one is set.
 | `POST /api/pu/update/check` | Start an update check; poll `status` for the result |
 | `POST /api/pu/update/install` | Install `version=vX.Y.Z`, or the latest if omitted |
 | `POST /api/pu/restart` | Restart the device |
+| `POST /api/pu/factory-reset` | `confirm` = the device name. Erases all stored values and restarts |
 | `GET /api/pu/page?path=/`, `GET /api/pu/page/values?path=/` | Layout and current values of a page declared in C++ |
 | `POST /api/pu/page/widget` | `path`, `widget` (position), `action` (`set`, `click`, `press`, `hold`, `release`), `value` |
 | `GET /api/pu/memory` | All areas and entries with type, value, default, stored/defined (no secret values) |

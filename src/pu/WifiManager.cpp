@@ -284,7 +284,7 @@ void WifiManager::startPortal() {
     }
     dnsServer_.start(kDnsPort, "*", WiFi.softAPIP()); // answer every lookup -> captive portal
     policy_.opened(millis());
-    lastRetryMs_ = millis();
+    lastRetryMs_.store(millis());
     portalActive_.store(true);
     log_->info("Access point '%s' open, settings at http://%s/settings", deviceName_.c_str(),
                WiFi.softAPIP().toString().c_str());
@@ -320,8 +320,9 @@ void WifiManager::loop() {
 
     // Retrying scans other channels, which disturbs clients of the access point, so only retry
     // while nobody is using the portal.
-    if (!connected && hasCredentials() && !portalInUse && now - lastRetryMs_ >= kRetryIntervalMs) {
-        lastRetryMs_ = now;
+    if (!connected && hasCredentials() && !portalInUse &&
+        now - lastRetryMs_.load() >= kRetryIntervalMs) {
+        lastRetryMs_.store(now);
         WiFi.reconnect();
     }
 
@@ -337,6 +338,37 @@ void WifiManager::loop() {
         break;
     }
     loopIpTrial();
+}
+
+bool WifiManager::startScan() {
+    const uint32_t now = millis();
+    const uint32_t started = scanStartedMs_.load();
+    if (started != 0 && now - started < kScanTimeoutMs && scanStatus() == WIFI_SCAN_RUNNING) {
+        return true; // a search is still running: its result will do
+    }
+    if (!isConnected()) {
+        WiFi.disconnect(false, false); // keeps the stored network; loop() retries later
+        lastRetryMs_.store(now);
+    }
+    WiFi.scanDelete();
+    if (WiFi.scanNetworks(true) == WIFI_SCAN_FAILED) {
+        return false;
+    }
+    scanStartedMs_.store(now == 0 ? 1 : now);
+    return true;
+}
+
+int16_t WifiManager::scanStatus() const {
+    const int16_t count = WiFi.scanComplete();
+    const uint32_t started = scanStartedMs_.load();
+    if (count == WIFI_SCAN_FAILED && started != 0 && millis() - started < kScanTimeoutMs) {
+        return WIFI_SCAN_RUNNING; // the core gave up, the radio has not
+    }
+    return count;
+}
+
+String WifiManager::defaultName() const {
+    return config_->deviceName + " " + chipSuffix();
 }
 
 bool WifiManager::isConnected() const {

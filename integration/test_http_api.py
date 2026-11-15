@@ -21,6 +21,7 @@ MUTATING = [
     "/api/pu/memory/set",
     "/api/pu/memory/reset",
     "/api/pu/memory/add",
+    "/api/pu/factory-reset",
 ]
 PROTECTED_GET = [
     "/",
@@ -190,6 +191,24 @@ def test_open_device_warns_in_its_log(device):
     if device.auth:
         pytest.skip("device has an admin password")
     assert any("No admin password set" in line for line in device.log_lines())
+
+
+@pytest.mark.parametrize("confirm", [None, "", "wrong name"])
+def test_factory_reset_needs_the_device_name(device, confirm):
+    before = device.status()
+    data = {} if confirm is None else {"confirm": confirm}
+    response = device.post("/api/pu/factory-reset", data)
+    assert response.status_code == 400
+    assert response.json()["ok"] is False
+    time.sleep(2)  # a reset would have started by now
+    after = device.status()
+    assert after["wifi"]["ssid"] == before["wifi"]["ssid"]
+    assert after["deviceName"] == before["deviceName"]
+
+
+def test_info_names_the_access_point_after_a_factory_reset(device):
+    info = device.json("/api/pu/info")
+    assert re.fullmatch(r".+ [0-9A-F]{6}", info["defaultName"])
 
 
 def test_short_admin_password_is_refused(device):
