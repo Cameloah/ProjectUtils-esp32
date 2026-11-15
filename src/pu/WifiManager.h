@@ -45,6 +45,7 @@ struct IpConfig {
 class WifiManager {
   public:
     static const uint32_t kIpTrialMs = 120000;
+    static const uint32_t kScanTimeoutMs = 15000;
 
     /// Registers the WiFi-related keys in `settings`. Call before settings.loadAll().
     static void defineSettings(Settings& settings);
@@ -63,7 +64,18 @@ class WifiManager {
     /// Name chosen by the user, or the configured default plus a chip-specific suffix.
     String deviceName() const { return deviceName_; }
     String hostname() const { return hostname_; }
+    /// The name without one chosen by the user: Config::deviceName plus a chip-specific suffix.
+    /// Also the access point's name after a factory reset.
+    String defaultName() const;
     static const char* modeName();
+
+    /// Starts a network search in the background. Stops connection attempts first while not
+    /// connected, since the radio cannot search while it tries to connect. Safe from any task.
+    bool startScan();
+    /// Like WiFi.scanComplete(), but keeps reporting WIFI_SCAN_RUNNING for a search this class
+    /// started until kScanTimeoutMs: with the access point open a search takes longer than the
+    /// Arduino core waits (6 s) before it reports a failure. Safe from any task.
+    int16_t scanStatus() const;
 
     const ApSettings& apSettings() const { return ap_; }
     static ApSettings apDefaults(const Config& config);
@@ -105,7 +117,8 @@ class WifiManager {
     String ssid_;
     std::atomic<bool> portalActive_{false};
     bool wasConnected_ = false;
-    uint32_t lastRetryMs_ = 0;
+    std::atomic<uint32_t> lastRetryMs_{0};
+    std::atomic<uint32_t> scanStartedMs_{0}; // 0 = no search started by startScan()
 
     std::atomic<bool> ipTrial_{false};
     std::atomic<uint32_t> ipTrialStartMs_{0};
