@@ -34,7 +34,7 @@ Add the library to your project's `platformio.ini`. Its dependencies are install
 platform = espressif32
 board = esp32dev
 framework = arduino
-lib_deps = https://github.com/Cameloah/ProjectUtils-esp32.git#v2.3.0
+lib_deps = https://github.com/Cameloah/ProjectUtils-esp32.git#v2.4.0
 ; TLS, web server and web console need more room than the default app partition offers
 board_build.partitions = min_spiffs.csv
 ```
